@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autotemplates"
+version = "0.1.0"
+description = "Small, fast template inserter for Windows: rich text, screenshots and highlighted code at the cursor, on a hotkey."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary - license to be decided" }
+authors = [{ name = "Bogdan Paul Murar" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+]
+# Two small, well-maintained dependencies. docx and rtf are read with the
+# standard library, so no Office libraries are needed.
+dependencies = [
+    "PySide6-Essentials>=6.6",
+    "Pygments>=2.17",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+autotemplates = "autotemplates.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,187 @@
+"""Interface texts in Romanian and English (setting ``language``)."""
+
+from __future__ import annotations
+
+_LANG = "ro"
+
+# key: (ro, en)
+TEXTS: dict[str, tuple[str, str]] = {
+    # picker
+    "picker.search": ("Caută template… (nume, categorie, etichetă, text)", "Search templates… (name, category, tag, text)"),
+    "picker.hint": ("Enter inserează · Shift+Enter text simplu · Alt+1…9 · Ctrl+E editează · Ctrl+D favorit · Esc",
+                    "Enter inserts · Shift+Enter plain text · Alt+1…9 · Ctrl+E edit · Ctrl+D favourite · Esc"),
+    "picker.all": ("Toate", "All"),
+    "picker.favourites": ("Favorite", "Favourites"),
+    "picker.new": ("Template nou (Ctrl+N)", "New template (Ctrl+N)"),
+    "picker.edit": ("Editează (Ctrl+E)", "Edit (Ctrl+E)"),
+    "picker.editor": ("Deschide editorul", "Open the editor"),
+    "picker.settings": ("Setări (Ctrl+,)", "Settings (Ctrl+,)"),
+    "picker.no_match": ("Niciun template nu se potrivește.", "No template matches."),
+    "picker.empty_library": ("Biblioteca e goală. Creează un template (Ctrl+N) sau pune fișiere în<br/>{folder}",
+                             "The library is empty. Create a template (Ctrl+N) or put files in<br/>{folder}"),
+    # tray
+    "tray.tooltip": ("{hotkey}: inserează un template", "{hotkey}: insert a template"),
+    "tray.insert": ("Inserează template…", "Insert template…"),
+    "tray.new": ("Template nou", "New template"),
+    "tray.new_clipboard": ("Template nou din clipboard", "New template from clipboard"),
+    "tray.editor": ("Editor și bibliotecă", "Editor and library"),
+    "tray.folder": ("Folderul bibliotecii", "Library folder"),
+    "tray.reload": ("Reîncarcă biblioteca", "Reload the library"),
+    "tray.settings": ("Setări", "Settings"),
+    "tray.quit": ("Ieșire", "Quit"),
+    "tray.copied": ("„{name}” a fost copiat în clipboard.", "“{name}” was copied to the clipboard."),
+    "tray.hotkey_busy": ("{hotkey} e folosită de alt program. Alege altă tastă în Setări.",
+                         "{hotkey} is used by another program. Choose another key in Settings."),
+    "tray.restart_language": ("Limba se aplică complet după repornire.", "The language fully applies after a restart."),
+    # editor
+    "editor.filter": ("Filtrează…", "Filter…"),
+    "editor.new": ("Nou", "New"),
+    "editor.open_folder": ("Folderul bibliotecii", "Library folder"),
+    "editor.name": ("Numele template-ului", "Template name"),
+    "editor.category": ("Categorie (subfolder)", "Category (sub-folder)"),
+    "editor.tags": ("Etichete, separate prin virgulă", "Tags, comma separated"),
+    "editor.abbreviation": ("Prescurtare", "Shortcut"),
+    "editor.description": ("Descriere (opțional)", "Description (optional)"),
+    "editor.mode_default": ("Inserare: ca în setări", "Insert: as in settings"),
+    "editor.mode_rich": ("Inserare: formatat", "Insert: formatted"),
+    "editor.mode_plain": ("Inserare: text simplu", "Insert: plain text"),
+    "editor.meta_rich_only": ("Doar template-urile create în editor păstrează aceste informații.",
+                              "Only templates made in the editor keep this information."),
+    "editor.code_hint": ("Codul se inserează colorat; variabilele nu se aplică fișierelor de cod.",
+                         "Code is inserted coloured; variables do not apply to code files."),
+    "editor.convert": ("Fă o copie editabilă", "Make an editable copy"),
+    "editor.open_external": ("Deschide în program", "Open in its program"),
+    "editor.readonly": ("Fișier {kind}: se inserează așa cum e. Pentru modificări fă o copie editabilă.",
+                        "{kind} file: inserted as it is. Make an editable copy to change it."),
+    "editor.empty": ("Alege un template din stânga sau creează unul nou (Ctrl+N).\n\n"
+                     "Sfat: copiază ceva (text, captură, cod) și alege „Nou › Din clipboard”.",
+                     "Pick a template on the left or create a new one (Ctrl+N).\n\n"
+                     "Tip: copy something (text, screenshot, code) and choose “New › From clipboard”."),
+    "editor.copy": ("Copiază", "Copy"),
+    "editor.copy_tip": ("Pune rezultatul în clipboard, ca să-l încerci", "Puts the result on the clipboard to try it"),
+    "editor.save": ("Salvează", "Save"),
+    "editor.saved": ("Salvat: {rel}", "Saved: {rel}"),
+    "editor.copied": ("Copiat în clipboard.", "Copied to the clipboard."),
+    "editor.new_status": ("Template nou, nesalvat", "New template, not saved"),
+    "editor.unsaved": ("Salvezi modificările din „{name}”?", "Save the changes to “{name}”?"),
+    "editor.exists": ("Există deja un fișier „{name}”.", "A file “{name}” already exists."),
+    "editor.save_failed": ("Nu s-a putut salva: {error}", "Could not save: {error}"),
+    # new
+    "new.rich": ("Template formatat", "Formatted template"),
+    "new.clipboard": ("Din clipboard", "From clipboard"),
+    "new.text": ("Text simplu (.txt)", "Plain text (.txt)"),
+    "new.markdown": ("Markdown (.md)", "Markdown (.md)"),
+    "new.code": ("Cod", "Code"),
+    "new.import": ("Importă fișiere…", "Import files…"),
+    "new.category": ("Categorie nouă…", "New category…"),
+    "new.category_name": ("Numele categoriei:", "Category name:"),
+    "new.default_name": ("Template nou", "New template"),
+    "new.supported": ("Fișiere acceptate", "Supported files"),
+    # tree
+    "tree.fav": ("Adaugă la favorite", "Add to favourites"),
+    "tree.unfav": ("Scoate din favorite", "Remove from favourites"),
+    "tree.rename": ("Redenumește…", "Rename…"),
+    "tree.move": ("Mută în categoria…", "Move to category…"),
+    "tree.duplicate": ("Duplică", "Duplicate"),
+    "tree.copy_suffix": ("copie", "copy"),
+    "tree.reveal": ("Arată în Explorer", "Show in Explorer"),
+    "tree.delete": ("Șterge (în Coșul de reciclare)", "Delete (to the Recycle Bin)"),
+    "tree.delete_confirm": ("Muți „{name}” în Coșul de reciclare?", "Move “{name}” to the Recycle Bin?"),
+    # formatting
+    "fmt.undo": ("Anulează", "Undo"), "fmt.redo": ("Refă", "Redo"),
+    "fmt.normal": ("Normal", "Normal"), "fmt.h1": ("Titlu 1", "Heading 1"), "fmt.h2": ("Titlu 2", "Heading 2"),
+    "fmt.h3": ("Titlu 3", "Heading 3"),
+    "fmt.bold": ("Îngroșat", "Bold"), "fmt.italic": ("Cursiv", "Italic"), "fmt.underline": ("Subliniat", "Underline"),
+    "fmt.strike": ("Tăiat", "Strikethrough"), "fmt.superscript": ("Exponent", "Superscript"),
+    "fmt.subscript": ("Indice", "Subscript"), "fmt.color": ("Culoare text", "Text colour"),
+    "fmt.highlight": ("Evidențiere / fundal", "Highlight / background"), "fmt.clear": ("Șterge formatarea", "Clear formatting"),
+    "fmt.no_color": ("Fără culoare", "No colour"), "fmt.more_colors": ("Alte culori…", "More colours…"),
+    "fmt.left": ("Aliniere stânga", "Align left"), "fmt.center": ("Centrat", "Centre"),
+    "fmt.right": ("Aliniere dreapta", "Align right"), "fmt.justify": ("Justificat", "Justify"),
+    "fmt.bullets": ("Listă cu buline", "Bulleted list"), "fmt.numbers": ("Listă numerotată", "Numbered list"),
+    "fmt.indent": ("Mărește indentarea", "Increase indent"), "fmt.outdent": ("Micșorează indentarea", "Decrease indent"),
+    "fmt.spacing": ("Spațiere rânduri și paragrafe", "Line and paragraph spacing"),
+    "fmt.line": ("Rânduri: {n}", "Lines: {n}"),
+    "fmt.para_none": ("Paragrafe: fără spațiu", "Paragraphs: no space"),
+    "fmt.para_small": ("Paragrafe: spațiu mic", "Paragraphs: small space"),
+    "fmt.para_medium": ("Paragrafe: spațiu mediu", "Paragraphs: medium space"),
+    "fmt.para_large": ("Paragrafe: spațiu mare", "Paragraphs: large space"),
+    "fmt.link": ("Link", "Link"), "fmt.table": ("Tabel", "Table"), "fmt.table_insert": ("Inserează tabel…", "Insert table…"),
+    "fmt.rows": ("Rânduri", "Rows"), "fmt.cols": ("Coloane", "Columns"),
+    "fmt.row_above": ("Rând deasupra", "Row above"), "fmt.row_below": ("Rând dedesubt", "Row below"),
+    "fmt.col_left": ("Coloană la stânga", "Column left"), "fmt.col_right": ("Coloană la dreapta", "Column right"),
+    "fmt.del_row": ("Șterge rândul", "Delete row"), "fmt.del_col": ("Șterge coloana", "Delete column"),
+    "fmt.cell_color": ("Culoarea celulei…", "Cell colour…"),
+    "fmt.rule": ("Linie orizontală", "Horizontal line"),
+    "fmt.image": ("Imagine din fișier…", "Picture from file…"),
+    "fmt.screenshot": ("Captură de ecran (Win+Shift+S)", "Screenshot (Win+Shift+S)"),
+    "fmt.screenshot_wait": ("Selectează zona; captura se inserează automat.", "Select the area; the screenshot is inserted automatically."),
+    "fmt.screenshot_hint": ("Apasă Win+Shift+S; captura se inserează automat.", "Press Win+Shift+S; the screenshot is inserted automatically."),
+    "fmt.screenshot_done": ("Captura a fost inserată.", "Screenshot inserted."),
+    "fmt.resize": ("Dimensiunea imaginii…", "Picture size…"),
+    "fmt.resize_hint": ("Pune cursorul lângă o imagine (sau selecteaz-o) și încearcă din nou.",
+                        "Place the cursor next to a picture (or select it) and try again."),
+    "fmt.width_px": ("Lățime (pixeli):", "Width (pixels):"),
+    "fmt.code": ("Bloc de cod colorat…", "Coloured code block…"),
+    "fmt.variable": ("Inserează o variabilă", "Insert a variable"),
+    "fmt.paste_plain": ("Lipește ca text simplu", "Paste as plain text"),
+    # code dialog
+    "code.title": ("Bloc de cod", "Code block"), "code.language": ("Limbaj:", "Language:"),
+    "code.auto": ("Automat", "Automatic"), "code.none": ("Fără colorare", "No colouring"),
+    "code.detected": ("Recunoscut: {lang}", "Detected: {lang}"),
+    # variables
+    "var.date": ("data de azi", "today's date"), "var.time": ("ora", "the time"),
+    "var.datetime": ("data și ora", "date and time"), "var.weekday": ("ziua săptămânii", "day of the week"),
+    "var.clipboard": ("ce e în clipboard", "the clipboard text"), "var.user": ("utilizatorul Windows", "Windows user"),
+    "var.cursor": ("aici rămâne cursorul", "the cursor ends here"),
+    "var.input": ("întreabă la inserare", "ask when inserting"), "var.input_label": ("Ce să întrebe?", "What to ask?"),
+    "input.insert": ("Inserează", "Insert"),
+    # settings
+    "settings.title": ("Setări AutoTemplates", "AutoTemplates settings"),
+    "settings.general": ("General", "General"), "settings.insertion": ("Inserare", "Insertion"),
+    "settings.editor": ("Editor și cod", "Editor and code"),
+    "settings.library": ("Folderul bibliotecii", "Library folder"), "settings.browse": ("Alege…", "Browse…"),
+    "settings.hotkey": ("Tasta rapidă", "Hotkey"), "settings.or_press": ("sau apasă:", "or press:"),
+    "settings.hotkey_ok": ("Tasta rapidă e activă.", "The hotkey is active."),
+    "settings.hotkey_busy": ("Tasta rapidă e ocupată de alt program; alege alta (ex. Ctrl+Alt+Q).",
+                             "Another program owns the hotkey; choose another one (e.g. Ctrl+Alt+Q)."),
+    "settings.hotkey_unsupported": ("Tastele globale funcționează doar pe Windows.", "Global hotkeys only work on Windows."),
+    "settings.hotkey_invalid": ("Tastă invalidă: {error}", "Invalid hotkey: {error}"),
+    "settings.language": ("Limba", "Language"), "settings.theme": ("Aspect", "Theme"),
+    "settings.dark": ("Întunecat", "Dark"), "settings.light": ("Luminos", "Light"),
+    "settings.autostart": ("Pornește cu Windows", "Start with Windows"),
+    "settings.devpilot_owns": ("Gestionat de DevPilot", "Managed by DevPilot"),
+    "settings.enter_inserts": ("Enter inserează", "Enter inserts"),
+    "settings.mode_rich": ("cu formatare (Shift+Enter = text simplu)", "formatted (Shift+Enter = plain text)"),
+    "settings.mode_plain": ("text simplu (Shift+Enter = cu formatare)", "plain text (Shift+Enter = formatted)"),
+    "settings.restore_clipboard": ("Păstrează ce era în clipboard", "Keep what was on the clipboard"),
+    "settings.paste_delay": ("Pauză înainte de lipire", "Delay before pasting"),
+    "settings.restore_delay": ("Restaurare clipboard după", "Restore the clipboard after"),
+    "settings.preview": ("Previzualizare în listă", "Preview in the list"),
+    "settings.sort": ("Ordine", "Order"),
+    "settings.sort_smart": ("Inteligentă (favorite, folosite des, recent)", "Smart (favourites, frequent, recent)"),
+    "settings.sort_name": ("Categorie și nume", "Category and name"),
+    "settings.picker_size": ("Mărimea listei", "List size"),
+    "settings.date_format": ("Format {date}", "{date} format"), "settings.time_format": ("Format {time}", "{time} format"),
+    "settings.editor_font": ("Font implicit", "Default font"), "settings.code_font": ("Font pentru cod", "Code font"),
+    "settings.code_style": ("Culori cod (inserare)", "Code colours (insertion)"),
+    "settings.code_bg": ("Fundal cod", "Code background"), "settings.code_bg_auto": ("din stilul ales", "from the style"),
+    "settings.managed_yes": ("pornit de DevPilot", "started by DevPilot"), "settings.managed_no": ("independent", "standalone"),
+    "settings.about": ("AutoTemplates {version} · {managed} · date: {data}", "AutoTemplates {version} · {managed} · data: {data}"),
+}
+
+
+def set_language(lang: str) -> None:
+    global _LANG
+    _LANG = lang if lang in ("ro", "en") else "en"
+
+
+def t(key: str, **kwargs) -> str:
+    pair = TEXTS.get(key)
+    text = key if pair is None else pair[0 if _LANG == "ro" else 1]
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except (KeyError, IndexError, ValueError):
+            return text
+    return text

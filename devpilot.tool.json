@@ -1,0 +1,19 @@
+{
+  "name": "AutoTemplates",
+  "description": "Templates at the cursor: rich text, screenshots, coloured code",
+  "glyph": "E8A5",
+  "pythonModule": "autotemplates",
+  "arguments": "gui",
+  "autoStartArguments": "gui --autostart",
+  "processMatch": "-m autotemplates",
+  "actions": [
+    { "label": "Insert template", "glyph": "E8C8", "kind": "Arguments", "arguments": "action picker", "section": "Templates", "featured": true },
+    { "label": "New template", "glyph": "E710", "kind": "Arguments", "arguments": "action new", "section": "Templates", "featured": true },
+    { "label": "New from clipboard", "glyph": "E77F", "kind": "Arguments", "arguments": "action new_clipboard", "section": "Templates" },
+    { "label": "Editor and library", "glyph": "E70F", "kind": "Arguments", "arguments": "action editor", "section": "Templates", "featured": true },
+    { "kind": "Separator" },
+    { "label": "Library folder", "glyph": "E838", "kind": "Arguments", "arguments": "action folder", "section": "Files" },
+    { "label": "Reload library", "glyph": "E72C", "kind": "Arguments", "arguments": "action reload", "section": "Files" },
+    { "label": "Settings", "glyph": "E713", "kind": "Arguments", "arguments": "action settings", "section": "Files" }
+  ]
+}
