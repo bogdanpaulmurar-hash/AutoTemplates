@@ -1,0 +1,30 @@
+# AutoTemplates — notes for Claude
+
+Small Windows tool that keeps the user's templates (formatted text, screenshots, coloured code, txt/docx/md/code files) and inserts them at the cursor in any app, on a global hotkey. Python + PySide6-Essentials + Pygments.
+
+## Commands
+- Dev install: `pip install -e .[dev]`
+- Tests: `pytest` (on Linux: `QT_QPA_PLATFORM=offscreen pytest`)
+- Run: `python -m autotemplates gui`; actions: `python -m autotemplates action picker|new|editor|settings|folder|reload|quit`; `--self-test`; `version`
+- User install: `Install.bat` → private venv in `%LOCALAPPDATA%\AutoTemplates\venv`, started with `pythonw`
+- Design: `docs/ARCHITECTURE.md` — read it before structural changes
+
+## Map (`src/autotemplates/`)
+`core` (library, index, variables, conversion — no Qt) · `ui` (picker, editor, settings, tray) · `platform` (Win32: hotkey, caret position, paste, clipboard) · `i18n.py` · `instance.py` (single instance + named pipe) · `samples.py`
+
+## Rules
+- No `.exe`: Python, `pythonw`, tray, start with Windows, own icon. Must not interfere with the other Python apps running in parallel.
+- Hotkey via `RegisterHotKey`, never a keyboard hook/keylogger. Default Ctrl+Q collides with Outlook/Word/Excel; Ctrl+Alt+Q is the recommended alternative.
+- The previous clipboard is always restored after pasting.
+- Templates live in a user-chosen folder (may be in Google Drive): one file = one template, sub-folder = category. Index and stats stay in `%LOCALAPPDATA%`, never in the library (sync conflicts).
+- Lazy loading for speed: Pygments and converters load on first use; library scan runs in the background.
+- DevPilot: `devpilot.tool.json`; respect `DEVPILOT_MANAGED` / `DEVPILOT_SUPPRESS` (`tray`, `autostart`).
+- UI in Romanian + English; code, comments, commits and technical docs in English; updates to the user in Romanian, short.
+- Visible docs: never the employer's name, company e-mails, internal IDs or numbers.
+- Status 0.1.0: hotkey, paste and clipboard (Win32) not yet tested on Windows — verify there before building on them.
+
+## Shared context
+Project overview and open bugs/changes live in two Google Docs: **PROIECTE_CONTEXT (live)** and **MODIFICARI_PROIECTE (live)** — read only the AutoTemplates section. Remove items from MODIFICARI once implemented and confirmed.
+
+## Keep this file current
+Update it in the same commit when: install/test/run commands change, a package is added/moved, the DevPilot integration changes, or a bug teaches a rule worth remembering. Not for ordinary features. Keep it under ~60 lines.
