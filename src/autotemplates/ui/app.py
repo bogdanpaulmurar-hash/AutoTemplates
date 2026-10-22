@@ -25,7 +25,7 @@ from autotemplates.ui.inserter import Inserter
 
 log = logging.getLogger(__name__)
 
-ACTIONS = ("picker", "new", "new_clipboard", "editor", "settings", "folder", "reload", "quit", "show")
+ACTIONS = ("picker", "new", "new_clipboard", "editor", "settings", "folder", "reload", "quit", "show", "noteit")
 
 
 def caret_to_logical(x: int, y: int) -> QPoint:
@@ -80,6 +80,8 @@ class Controller(QObject):
         self.inserter = Inserter(settings, self)
         self.tray: QSystemTrayIcon | None = None
         self._picker = None
+        self._launcher = None
+        self._noteit = None
         self._editor = None
         self._target = 0
         self._hotkey_ok = False
@@ -126,14 +128,26 @@ class Controller(QObject):
 
     # ================================================================ hotkey
     def register_hotkey(self) -> bool:
+        hotkeys: dict[str, tuple[Hotkey, any]] = {}
         try:
-            hk = Hotkey.parse(self.settings.get("hotkey"))
+            hk_picker = Hotkey.parse(self.settings.get("hotkey"))
         except ValueError:
             log.warning("Invalid hotkey %r; using Ctrl+Q", self.settings.get("hotkey"))
-            hk = Hotkey.parse("Ctrl+Q")
-        self._hotkey_ok = self.listener.register(hk)
+            hk_picker = Hotkey.parse("Ctrl+Q")
+        hotkeys["picker"] = (hk_picker, self._hotkey_thread)
+
+        noteit_hk_str = str(self.settings.get("noteit_hotkey") or "").strip()
+        if noteit_hk_str:
+            try:
+                hk_note = Hotkey.parse(noteit_hk_str)
+                hotkeys["noteit"] = (hk_note, lambda: self.remote_action.emit({"action": "noteit"}))
+            except ValueError:
+                log.warning("Invalid noteit hotkey %r", noteit_hk_str)
+
+        results = self.listener.register_map(hotkeys)
+        self._hotkey_ok = results.get("picker", False)
         if not self._hotkey_ok and self.listener.supported:
-            self.notify(t("tray.hotkey_busy", hotkey=hk.text))
+            self.notify(t("tray.hotkey_busy", hotkey=hk_picker.text))
         return self._hotkey_ok
 
     def hotkey_status(self) -> str:
@@ -146,11 +160,59 @@ class Controller(QObject):
         self.hotkey_fired.emit(hwnd, win32.caret_position(hwnd))
 
     def _on_hotkey(self, hwnd: int, caret) -> None:
-        picker = self.picker
-        if picker.isVisible():
-            picker.hide()
+        if self._launcher is not None and self._launcher.isVisible():
+            self._launcher.hide()
             return
-        self.show_picker(hwnd, caret)
+        if self._picker is not None and self._picker.isVisible():
+            self._picker.hide()
+            return
+
+        own_picker = self._picker is not None and hwnd == int(self._picker.winId())
+        self._target = hwnd if hwnd and not own_picker and win32.can_receive(hwnd) else 0
+
+        anchor = caret_to_logical(caret[0], caret[1]) if caret else QCursor.pos()
+        if self.settings.get("launcher_enabled", True):
+            self.show_launcher(anchor)
+        else:
+            self.show_picker(hwnd, caret)
+
+    @property
+    def launcher(self):
+        if self._launcher is None:
+            from autotemplates.ui.launcher import QuickLauncher
+
+            self._launcher = QuickLauncher(self)
+            self._launcher.noteit_selected.connect(lambda: self.show_noteit())
+            self._launcher.templates_selected.connect(lambda: self.show_picker())
+        return self._launcher
+
+    def show_launcher(self, anchor: QPoint | None = None) -> None:
+        if self._picker is not None and self._picker.isVisible():
+            self._picker.hide()
+        self.launcher.popup(anchor)
+        win32.focus_window(int(self.launcher.winId()))
+
+    @property
+    def noteit(self):
+        if self._noteit is None:
+            from autotemplates.ui.noteit import NoteITWindow
+
+            self._noteit = NoteITWindow(self)
+        return self._noteit
+
+    def show_noteit(self, title: str = "", content_html: str = "") -> None:
+        if self._launcher is not None and self._launcher.isVisible():
+            self._launcher.hide()
+        if self._picker is not None and self._picker.isVisible():
+            self._picker.hide()
+        ni = self.noteit
+        if not ni.isVisible() or title or content_html:
+            ni.reset_form(title, content_html)
+        ni.show_and_raise()
+        try:
+            win32.focus_window(int(ni.winId()))
+        except Exception:
+            pass
 
     # ================================================================ picker / insert
     @property
@@ -163,6 +225,7 @@ class Controller(QObject):
             p.copy_requested.connect(lambda rel, shift: self.copy_template(rel, plain=self._plain(rel, shift)))
             p.edit_requested.connect(self.edit_template)
             p.new_requested.connect(lambda: self.editor.new_template("rich"))
+            p.noteit_requested.connect(self.show_noteit)
             p.editor_requested.connect(self.show_editor)
             p.settings_requested.connect(self.show_settings)
             p.favourite_toggled.connect(lambda rel: self.library.usage.set_favourite(rel, not self.library.usage.favourite(rel)))
@@ -170,6 +233,8 @@ class Controller(QObject):
         return self._picker
 
     def show_picker(self, hwnd: int | None = None, caret=None) -> None:
+        if self._launcher is not None and self._launcher.isVisible():
+            self._launcher.hide()
         if hwnd is None:
             hwnd = win32.foreground_window()
             caret = win32.caret_position(hwnd)
@@ -251,7 +316,7 @@ class Controller(QObject):
         dlg.exec()
 
     def _setting_changed(self, key: str, value) -> None:
-        if key == "hotkey":
+        if key in ("hotkey", "noteit_hotkey"):
             self.register_hotkey()
         elif key == "theme":
             theme.apply_theme(self.qt_app, value)
@@ -335,7 +400,7 @@ class Controller(QObject):
         tray = QSystemTrayIcon(theme.app_icon(), self)
         tray.setToolTip(f"AutoTemplates {__version__}\n{t('tray.tooltip', hotkey=self.settings.get('hotkey'))}")
         menu = QMenu()
-        for label, icon, action in (("tray.insert", "insert", "picker"), ("tray.new", "new", "new"),
+        for label, icon, action in (("tray.insert", "insert", "picker"), ("tray.noteit", "note", "noteit"), ("tray.new", "new", "new"),
                                     ("tray.new_clipboard", "copy", "new_clipboard"), ("tray.editor", "edit", "editor"),
                                     (None, None, None), ("tray.folder", "folder", "folder"),
                                     ("tray.reload", "refresh", "reload"), ("tray.settings", "settings", "settings"),
@@ -373,6 +438,8 @@ class Controller(QObject):
         action = message.get("action")
         if action == "picker":
             self.show_picker(message.get("hwnd"), message.get("caret"))
+        elif action == "noteit":
+            self.show_noteit()
         elif action == "new":
             self.editor.new_template("rich")
         elif action == "new_clipboard":

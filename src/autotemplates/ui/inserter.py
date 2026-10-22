@@ -45,12 +45,39 @@ def backup_clipboard() -> QMimeData | None:
     return copy if copy.formats() else None
 
 
+def wrap_cf_html(html: str) -> str:
+    """Wraps HTML so Windows CF_HTML (MS Word, Outlook, Teams, OneNote) reliably detects fragments."""
+    if not html:
+        return ""
+    if "<!--StartFragment-->" in html:
+        return html
+    lower = html.lower()
+    if "<body" in lower and "</body>" in lower:
+        body_start = lower.find("<body")
+        body_tag_end = html.find(">", body_start) + 1
+        body_close = lower.rfind("</body>")
+        return (
+            html[:body_tag_end]
+            + "<!--StartFragment-->"
+            + html[body_tag_end:body_close]
+            + "<!--EndFragment-->"
+            + html[body_close:]
+        )
+    return (
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>"
+        "<!--StartFragment-->" + html + "<!--EndFragment-->"
+        "</body></html>"
+    )
+
+
 def build_mime(html: str, text: str, image_path=None, *, plain: bool = False) -> QMimeData:
     mime = QMimeData()
     mime.setText(text)
     if not plain:
         if html:
-            mime.setHtml(html)
+            wrapped = wrap_cf_html(html)
+            mime.setHtml(wrapped)
+            mime.setData("text/html", wrapped.encode("utf-8"))
         if image_path is not None:
             image = QImage(str(image_path))
             if not image.isNull():
@@ -96,13 +123,13 @@ class Inserter(QObject):
         win32.release_modifiers()
         if target_hwnd:
             win32.focus_window(target_hwnd)
-        time.sleep(max(0, int(self.settings.get("paste_delay_ms"))) / 1000)
+        time.sleep(max(0.08, int(self.settings.get("paste_delay_ms")) / 1000))
         win32.send_paste()
         if back:
             time.sleep(0.03)
             win32.send_left(back)
         if self.settings.get("restore_clipboard"):
-            self._restore_timer.start(max(150, int(self.settings.get("restore_delay_ms"))))
+            self._restore_timer.start(max(1200, int(self.settings.get("restore_delay_ms"))))
 
     def copy_only(self, rendered: Rendered, *, plain: bool, answers: dict[str, str] | None = None) -> None:
         """Puts the template on the clipboard without pasting (Ctrl+C in the picker)."""

@@ -267,7 +267,7 @@ class EditorWindow(QMainWindow):
         if shortcut:
             a.setShortcut(QKeySequence(shortcut))
             a.setToolTip(f"{t(tip)} ({shortcut})")
-            a.setShortcutContext(Qt.WidgetWithChildrenShortcut)
+            a.setShortcutContext(Qt.WindowShortcut)
         a.triggered.connect(slot)
         bar.addAction(a)
         return a

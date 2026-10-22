@@ -23,6 +23,7 @@ from autotemplates.ui import theme
 ROLE_REL = Qt.UserRole + 1
 ROLE_SUB = Qt.UserRole + 2
 ROLE_FAV = Qt.UserRole + 3
+ROLE_IS_HEADER = Qt.UserRole + 4
 
 KIND_BADGE = {"rich": "Rich", "markdown": "MD", "text": "TXT", "code": "", "docx": "DOCX", "rtf": "RTF", "image": "IMG"}
 
@@ -34,16 +35,35 @@ def kind_label(tpl: Template) -> str:
 
 
 class ItemDelegate(QStyledItemDelegate):
-    """Two lines per template: name (+ shortcut, star) and category · type · preview."""
+    """Two lines per template: name (+ shortcut, star) and category · type · preview.
+    Handles visual headers cleanly."""
 
     def sizeHint(self, option, index) -> QSize:
         fm = QFontMetrics(option.font)
+        if index.data(ROLE_IS_HEADER):
+            return QSize(200, fm.height() + 8)
         return QSize(200, fm.height() * 2 + 14)
 
     def paint(self, painter: QPainter, option, index) -> None:
         painter.save()
         c = theme.colors(self.parent().property("themeMode") or "dark")
         rect = option.rect.adjusted(2, 1, -2, -1)
+
+        if index.data(ROLE_IS_HEADER):
+            painter.fillRect(rect, QColor(c["panel2"]))
+            h_font = QFont(option.font)
+            h_font.setBold(True)
+            h_font.setPointSize(max(8, option.font.pointSize() - 1))
+            painter.setFont(h_font)
+            painter.setPen(QColor(theme.ACCENT))
+            title = index.data(Qt.DisplayRole) or ""
+            painter.drawText(QRect(rect.left() + 8, rect.top() + 2, rect.width() - 16, rect.height() - 4),
+                             Qt.AlignLeft | Qt.AlignVCenter, title)
+            painter.setPen(QColor(c["border"]))
+            painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.bottom())
+            painter.restore()
+            return
+
         if option.state & QStyle.State_Selected:
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(c["select"]))
@@ -53,19 +73,20 @@ class ItemDelegate(QStyledItemDelegate):
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(c["hover"]))
             painter.drawRoundedRect(rect, 6, 6)
+
         name_font = QFont(option.font)
         name_font.setBold(True)
         fm = QFontMetrics(name_font)
         x, y = rect.left() + 12, rect.top() + 5
         number = index.row() + 1
-        if number <= 9:
+        if number <= 9 and not index.data(ROLE_IS_HEADER):
             painter.setPen(QColor(c["muted"]))
             painter.setFont(option.font)
             painter.drawText(QRect(rect.right() - 28, y, 22, fm.height()), Qt.AlignRight, f"{number}")
         painter.setFont(name_font)
         painter.setPen(QColor(c["text"]))
         star = "★ " if index.data(ROLE_FAV) else ""
-        name = fm.elidedText(star + index.data(Qt.DisplayRole), Qt.ElideRight, rect.width() - 50)
+        name = fm.elidedText(star + (index.data(Qt.DisplayRole) or ""), Qt.ElideRight, rect.width() - 50)
         painter.drawText(QRect(x, y, rect.width() - 50, fm.height()), Qt.AlignLeft, name)
         painter.setFont(option.font)
         painter.setPen(QColor(c["muted"]))
@@ -80,6 +101,7 @@ class Picker(QWidget):
     copy_requested = Signal(str, bool)
     edit_requested = Signal(str)
     new_requested = Signal()
+    noteit_requested = Signal()
     settings_requested = Signal()
     editor_requested = Signal()
     favourite_toggled = Signal(str)
@@ -136,7 +158,8 @@ class Picker(QWidget):
         self.hint = QLabel()
         self.hint.setObjectName("Hint")
         bottom.addWidget(self.hint, 1)
-        for icon, tip, slot in (("new", "picker.new", self.new_requested.emit),
+        for icon, tip, slot in (("note", "picker.noteit", self.noteit_requested.emit),
+                                ("new", "picker.new", self.new_requested.emit),
                                 ("edit", "picker.edit", self._edit),
                                 ("doc", "picker.editor", self.editor_requested.emit),
                                 ("settings", "picker.settings", self.settings_requested.emit)):
@@ -171,14 +194,15 @@ class Picker(QWidget):
         self.category.clear()
         self.category.addItem(t("picker.all"), None)
         self.category.addItem("★ " + t("picker.favourites"), "★")
-        for cat in self.controller.library.categories():
+        raw_cats = self.controller.library.categories() if callable(getattr(self.controller.library, "categories", None)) else getattr(self.controller.library, "categories", [])
+        for cat in raw_cats:
             self.category.addItem(cat, cat)
         idx = max(0, self.category.findData(current)) if current else 0
         self.category.setCurrentIndex(idx)
         self._category = self.category.currentData()
         self.category.blockSignals(False)
 
-    def popup(self, anchor: QPoint | None) -> None:
+    def popup(self, anchor: QPoint | None, hwnd: int = 0) -> None:
         s = self.controller.settings
         self.setProperty("themeMode", s.get("theme"))
         self.list.setProperty("themeMode", s.get("theme"))
@@ -316,7 +340,6 @@ class Picker(QWidget):
         super().keyPressEvent(event)
 
     def changeEvent(self, event) -> None:
-        # Clicking elsewhere closes the list (like a menu), unless a dialog of ours took the focus.
         if event.type() == QEvent.ActivationChange and not self.isActiveWindow() and self.isVisible():
             QTimer.singleShot(120, self._hide_if_inactive)
         super().changeEvent(event)

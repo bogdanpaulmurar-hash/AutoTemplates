@@ -93,7 +93,36 @@ class RichEdit(QTextEdit):
         if event.matches(QKeySequence.Paste) and event.modifiers() & Qt.ShiftModifier:
             self.paste_plain()
             return
+        # Support MS Office / Windows standard rich text formatting shortcuts
+        if event.matches(QKeySequence.Bold) or (event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_B):
+            self.toggle_bold()
+            return
+        if event.matches(QKeySequence.Italic) or (event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_I):
+            self.toggle_italic()
+            return
+        if event.matches(QKeySequence.Underline) or (event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_U):
+            self.toggle_underline()
+            return
+        if event.modifiers() == (Qt.ControlModifier | Qt.ShiftModifier) and event.key() == Qt.Key_X:
+            self.toggle_strike()
+            return
         super().keyPressEvent(event)
+
+    def toggle_bold(self) -> None:
+        is_bold = self.fontWeight() >= QFont.DemiBold or self.currentCharFormat().fontWeight() >= QFont.DemiBold
+        self.set_bold(not is_bold)
+
+    def toggle_italic(self) -> None:
+        is_italic = self.fontItalic() or self.currentCharFormat().fontItalic()
+        self.set_italic(not is_italic)
+
+    def toggle_underline(self) -> None:
+        is_under = self.fontUnderline() or self.currentCharFormat().fontUnderline()
+        self.set_underline(not is_under)
+
+    def toggle_strike(self) -> None:
+        is_strike = self.currentCharFormat().fontStrikeOut()
+        self.set_strike(not is_strike)
 
     def paste_plain(self) -> None:
         from PySide6.QtGui import QGuiApplication

@@ -61,3 +61,7 @@ class AppPaths:
     @classmethod
     def default(cls) -> "AppPaths":
         return cls(default_data_dir())
+
+
+# Alias for backward and forward compatibility
+Paths = AppPaths

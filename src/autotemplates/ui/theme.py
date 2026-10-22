@@ -90,6 +90,7 @@ def apply_theme(app: QApplication, mode: str) -> None:
 
 # Segoe Fluent Icons (Windows 11) / Segoe MDL2 Assets (Windows 10) code points.
 GLYPHS = {
+    "pin": "", "unpin": "", "mail": "", "note": "", "send": "", "onenote": "",
     "undo": "", "redo": "", "bold": "", "italic": "", "underline": "",
     "strike": "", "color": "", "highlight": "", "clear": "", "left": "",
     "center": "", "right": "", "justify": "", "bullets": "", "numbers": "",

@@ -15,6 +15,10 @@ log = logging.getLogger(__name__)
 DEFAULTS: dict[str, Any] = {
     "library_dir": "",  # empty = Documents\AutoTemplates
     "hotkey": "Ctrl+Q",
+    "noteit_hotkey": "Ctrl+Alt+N",
+    "noteit_stay_on_top": True,
+    "noteit_folder": "Notes",
+    "launcher_enabled": True,
     "language": "ro",  # ro | en
     "theme": "dark",  # dark | light
     "start_with_windows": True,
@@ -26,6 +30,7 @@ DEFAULTS: dict[str, Any] = {
     "picker_height": 440,
     "picker_show_preview": True,
     "picker_sort": "smart",  # smart (favourites, use count, recent) | name
+    "picker_group_categories": False,
     "editor_font_family": "Segoe UI",
     "editor_font_size": 11,
     "code_font_family": "Cascadia Mono",
@@ -38,8 +43,9 @@ DEFAULTS: dict[str, Any] = {
 
 
 class Settings:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, library_dir: Path | None = None) -> None:
         self.path = Path(path)
+        self._default_library = library_dir
         self._values: dict[str, Any] = dict(DEFAULTS)
         self._listeners: list[Callable[[str, Any], None]] = []
         self.load()
@@ -49,7 +55,7 @@ class Settings:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 for key, value in data.items():
-                    if key in DEFAULTS and isinstance(value, type(DEFAULTS[key])):
+                    if key in DEFAULTS:
                         self._values[key] = value
         except FileNotFoundError:
             pass
@@ -62,15 +68,17 @@ class Settings:
         tmp.write_text(json.dumps(self._values, indent=2, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, self.path)
 
-    def get(self, key: str) -> Any:
-        return self._values.get(key, DEFAULTS.get(key))
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._values.get(key, DEFAULTS.get(key, default))
 
     def set(self, key: str, value: Any, *, save: bool = True) -> None:
         if key not in DEFAULTS:
-            raise KeyError(key)
-        if self._values.get(key) == value:
+            self._values[key] = value
+        elif self._values.get(key) == value:
             return
-        self._values[key] = value
+        else:
+            self._values[key] = value
+
         if save:
             self.save()
         for listener in list(self._listeners):
@@ -80,7 +88,7 @@ class Settings:
                 log.exception("Settings listener failed for %s", key)
 
     def update(self, values: dict[str, Any]) -> None:
-        changed = {k: v for k, v in values.items() if k in DEFAULTS and self._values.get(k) != v}
+        changed = {k: v for k, v in values.items() if self._values.get(k) != v}
         for key, value in changed.items():
             self.set(key, value, save=False)
         if changed:
@@ -89,10 +97,18 @@ class Settings:
     def add_listener(self, fn: Callable[[str, Any], None]) -> None:
         self._listeners.append(fn)
 
+    def subscribe(self, fn: Callable[[str, Any], None]) -> None:
+        """Alias for add_listener."""
+        self.add_listener(fn)
+
     @property
     def library_dir(self) -> Path:
         value = str(self.get("library_dir") or "").strip()
-        return Path(os.path.expandvars(os.path.expanduser(value))) if value else default_library_dir()
+        if value:
+            return Path(os.path.expandvars(os.path.expanduser(value)))
+        if self._default_library is not None:
+            return Path(self._default_library)
+        return default_library_dir()
 
     def as_dict(self) -> dict[str, Any]:
         return dict(self._values)

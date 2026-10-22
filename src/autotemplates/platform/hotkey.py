@@ -1,4 +1,4 @@
-"""One system-wide hotkey through ``RegisterHotKey`` (no keyboard hook).
+"""System-wide hotkeys through ``RegisterHotKey`` (no keyboard hook).
 
 ``RegisterHotKey`` does not observe other keystrokes (unlike low-level hooks,
 which security tools flag) and fails cleanly when another program already owns
@@ -67,43 +67,50 @@ def key_code(key: str) -> int:
 
 
 class HotkeyListener:
-    """Calls ``on_hotkey`` (on the listener thread) when the registered hotkey is pressed."""
+    """Calls registered callbacks on the listener thread when a hotkey is pressed."""
 
-    ID = 0xA7E1
+    BASE_ID = 0xA7E0
 
-    def __init__(self, on_hotkey: Callable[[], None]) -> None:
-        self._on_hotkey = on_hotkey
+    def __init__(self, on_hotkey: Callable[[], None] | None = None) -> None:
+        self._default_callback = on_hotkey
         self._thread: threading.Thread | None = None
         self._thread_id = 0
-        self._result: tuple[threading.Event, list[bool]] | None = None
 
     @property
     def supported(self) -> bool:
         return sys.platform == "win32"
 
     def register(self, hotkey: Hotkey) -> bool:
-        """(Re)registers ``hotkey``; ``False`` when another program owns it."""
+        """(Re)registers a single hotkey for backwards compatibility."""
+        cb = self._default_callback
+        res = self.register_map({"default": (hotkey, cb)})
+        return res.get("default", False)
+
+    def register_map(self, hotkeys: dict[str, tuple[Hotkey, Callable[[], None]]]) -> dict[str, bool]:
+        """(Re)registers a mapping of name -> (Hotkey, callback)."""
         self.stop()
         if not self.supported:
-            return False
-        done, result = threading.Event(), [False]
-        self._thread = threading.Thread(target=self._run, args=(hotkey, done, result), name="hotkey", daemon=True)
+            return {k: False for k in hotkeys}
+        done = threading.Event()
+        results: dict[str, bool] = {}
+        self._thread = threading.Thread(target=self._run, args=(hotkeys, done, results), name="hotkey", daemon=True)
         self._thread.start()
         done.wait(2.0)
-        if not result[0]:
-            self.stop()
-        return result[0]
+        return results
 
     def stop(self) -> None:
         if self._thread is None:
             return
         import ctypes
 
-        ctypes.windll.user32.PostThreadMessageW(self._thread_id, 0x0012, 0, 0)  # WM_QUIT
-        self._thread.join(2.0)
+        try:
+            ctypes.windll.user32.PostThreadMessageW(self._thread_id, 0x0012, 0, 0)  # WM_QUIT
+            self._thread.join(2.0)
+        except Exception:  # noqa: BLE001
+            pass
         self._thread = None
 
-    def _run(self, hotkey: Hotkey, done: threading.Event, result: list[bool]) -> None:
+    def _run(self, hotkeys: dict[str, tuple[Hotkey, Callable[[], None]]], done: threading.Event, results: dict[str, bool]) -> None:
         import ctypes
         from ctypes import wintypes
 
@@ -112,19 +119,37 @@ class HotkeyListener:
         msg = wintypes.MSG()
         user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)  # creates the message queue
         self._thread_id = kernel32.GetCurrentThreadId()
-        ok = bool(user32.RegisterHotKey(None, self.ID, hotkey.modifiers | MOD_NOREPEAT, hotkey.vk))
-        if not ok:
-            log.warning("RegisterHotKey(%s) failed, Win32 error %d", hotkey.text, ctypes.get_last_error())
-        result[0] = ok
+
+        id_to_cb: dict[int, Callable[[], None]] = {}
+        current_id = self.BASE_ID
+        any_registered = False
+
+        for name, (hk, cb) in hotkeys.items():
+            current_id += 1
+            ok = bool(user32.RegisterHotKey(None, current_id, hk.modifiers | MOD_NOREPEAT, hk.vk))
+            results[name] = ok
+            if ok:
+                id_to_cb[current_id] = cb
+                any_registered = True
+            else:
+                log.warning("RegisterHotKey(%s - %s) failed, Win32 error %d", name, hk.text, ctypes.get_last_error())
+
         done.set()
-        if not ok:
+        if not any_registered:
             return
+
         try:
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-                if msg.message == 0x0312 and msg.wParam == self.ID:  # WM_HOTKEY
+                if msg.message == 0x0312 and msg.wParam in id_to_cb:  # WM_HOTKEY
                     try:
-                        self._on_hotkey()
+                        callback = id_to_cb[msg.wParam]
+                        if callback:
+                            callback()
                     except Exception:  # noqa: BLE001
                         log.exception("Hotkey handler failed")
         finally:
-            user32.UnregisterHotKey(None, self.ID)
+            for hid in id_to_cb:
+                try:
+                    user32.UnregisterHotKey(None, hid)
+                except Exception:
+                    pass
