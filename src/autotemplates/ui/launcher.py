@@ -65,18 +65,19 @@ class QuickLauncher(QWidget):
                 background: #282b34;
                 border: 1.5px solid #373b47;
                 border-radius: 10px;
-                padding: 14px 16px;
                 text-align: left;
-                min-width: 170px;
+                min-width: 190px;
+                min-height: 96px;
             }}
             QPushButton#CardNoteIT:hover, QPushButton#CardNoteIT:focus {{
                 background: #313542;
                 border: 1.5px solid {ACCENT};
             }}
         """)
+        self.btn_noteit.setMinimumSize(190, 96)
         lay_n = QVBoxLayout(self.btn_noteit)
-        lay_n.setContentsMargins(0, 0, 0, 0)
-        lay_n.setSpacing(4)
+        lay_n.setContentsMargins(14, 12, 14, 12)
+        lay_n.setSpacing(6)
 
         row_nh = QHBoxLayout()
         icon_n = QLabel()
@@ -106,18 +107,19 @@ class QuickLauncher(QWidget):
                 background: #282b34;
                 border: 1.5px solid #373b47;
                 border-radius: 10px;
-                padding: 14px 16px;
                 text-align: left;
-                min-width: 170px;
+                min-width: 190px;
+                min-height: 96px;
             }}
             QPushButton#CardTemplates:hover, QPushButton#CardTemplates:focus {{
                 background: #313542;
                 border: 1.5px solid {ACCENT};
             }}
         """)
+        self.btn_templates.setMinimumSize(190, 96)
         lay_t = QVBoxLayout(self.btn_templates)
-        lay_t.setContentsMargins(0, 0, 0, 0)
-        lay_t.setSpacing(4)
+        lay_t.setContentsMargins(14, 12, 14, 12)
+        lay_t.setSpacing(6)
 
         row_th = QHBoxLayout()
         icon_t = QLabel()

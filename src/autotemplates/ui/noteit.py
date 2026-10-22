@@ -50,7 +50,7 @@ class NoteITWindow(QWidget):
                 padding: 6px 10px;
                 border-radius: 6px;
                 background: {c['panel']};
-                color: {c['fg']};
+                color: {c['text']};
                 border: 1px solid {c['border']};
             }}
             QLineEdit#NoteTitle:focus {{
@@ -60,7 +60,7 @@ class NoteITWindow(QWidget):
                 padding: 4px 8px;
                 border-radius: 6px;
                 background: {c['panel']};
-                color: {c['fg']};
+                color: {c['text']};
                 border: 1px solid {c['border']};
             }}
             QToolButton {{
@@ -101,7 +101,7 @@ class NoteITWindow(QWidget):
         self.btn_pin = QToolButton()
         self.btn_pin.setCheckable(True)
         self.btn_pin.setChecked(bool(self.controller.settings.get("noteit_stay_on_top", True)))
-        self.btn_pin.setToolTip(t("noteit.pin_tip"))
+        self.btn_pin.setToolTip(t("noteit.stay_on_top"))
         self._update_pin_icon()
         self.btn_pin.toggled.connect(self._toggle_stay_on_top)
         top_bar.addWidget(self.btn_pin)
@@ -232,7 +232,7 @@ class NoteITWindow(QWidget):
         mime.setData("text/html", wrapped.encode("utf-8"))
         clipboard.setMimeData(mime)
         self.hide()
-        self.controller.notify(t("noteit.copied_to_clipboard"))
+        self.controller.notify(t("noteit.copied"))
 
     def _save_as_template(self) -> None:
         title = self.title_edit.text().strip() or "Untitled Note"
@@ -251,7 +251,7 @@ class NoteITWindow(QWidget):
         try:
             target_file.write_text(self.editor.toHtml(), encoding="utf-8")
             self.controller.rescan()
-            self.controller.notify(t("noteit.saved_as_template", path=str(target_file.name)))
+            self.controller.notify(t("noteit.saved", name=target_file.name))
             self.hide()
         except OSError as e:
             QMessageBox.warning(self, "Eroare", f"Nu s-a putut salva nota:\n{e}")
