@@ -1,5 +1,4 @@
 """Rich text editing widget: formatting commands, pasted screenshots, tables, code blocks."""
-
 from __future__ import annotations
 
 import hashlib
@@ -9,18 +8,198 @@ import re
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, QUrl, Qt, Signal
-from PySide6.QtGui import (QBrush, QColor, QFont, QImage, QKeySequence, QTextBlockFormat, QTextCharFormat,
-                           QTextCursor, QTextDocument, QTextFrameFormat, QTextImageFormat, QTextLength,
-                           QTextListFormat, QTextTableFormat)
-from PySide6.QtWidgets import QTextEdit
+from PySide6.QtCore import QMimeData, QPoint, QUrl, Qt, Signal
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QImage,
+    QKeySequence,
+    QPixmap,
+    QTextBlockFormat,
+    QTextCharFormat,
+    QTextCursor,
+    QTextDocument,
+    QTextFrameFormat,
+    QTextImageFormat,
+    QTextLength,
+    QTextListFormat,
+    QTextTableFormat,
+)
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QTextEdit,
+    QVBoxLayout,
+)
 
 from autotemplates.core import formats
+from autotemplates.i18n import t
 
 log = logging.getLogger(__name__)
 
 IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=")([^"]+)(")', re.I)
 HEADING_SIZES = {1: 20, 2: 16, 3: 13}
+
+
+class ImageResizeDialog(QDialog):
+    """Interactive dialog for resizing and modifying pasted images with live presets."""
+
+    def __init__(
+        self,
+        parent=None,
+        orig_w: int = 800,
+        orig_h: int = 600,
+        current_w: int = 500,
+        current_h: int = 375,
+        avail_w: int = 520,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(t("image.dialog_title"))
+        self.setMinimumWidth(380)
+        self.orig_w = max(1, orig_w)
+        self.orig_h = max(1, orig_h)
+        self.aspect_ratio = self.orig_w / self.orig_h
+        self.avail_w = max(100, avail_w)
+        self.should_delete = False
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(18, 18, 18, 18)
+
+        # Header info
+        info_orig = QLabel(t("image.orig_size", w=self.orig_w, h=self.orig_h))
+        info_orig.setStyleSheet("font-weight: bold; font-size: 10pt;")
+        layout.addWidget(info_orig)
+
+        info_curr = QLabel(t("image.curr_size", w=current_w, h=current_h))
+        info_curr.setStyleSheet("color: #9a9eab; font-size: 9pt;")
+        layout.addWidget(info_curr)
+
+        # Presets label
+        lbl_presets = QLabel("Preset-uri rapide / Quick presets:")
+        lbl_presets.setStyleSheet("font-size: 8.5pt; color: #9a9eab; margin-top: 4px;")
+        layout.addWidget(lbl_presets)
+
+        row_presets = QHBoxLayout()
+        row_presets.setSpacing(6)
+
+        btn_fit = QPushButton("100% Fit")
+        btn_fit.setToolTip(t("image.fit_width"))
+        btn_fit.clicked.connect(self._set_fit)
+        row_presets.addWidget(btn_fit)
+
+        btn_75 = QPushButton("75%")
+        btn_75.clicked.connect(lambda: self._set_percent(0.75))
+        row_presets.addWidget(btn_75)
+
+        btn_50 = QPushButton("50%")
+        btn_50.clicked.connect(lambda: self._set_percent(0.50))
+        row_presets.addWidget(btn_50)
+
+        btn_25 = QPushButton("25%")
+        btn_25.clicked.connect(lambda: self._set_percent(0.25))
+        row_presets.addWidget(btn_25)
+
+        btn_orig = QPushButton("1:1 (Orig)")
+        btn_orig.setToolTip(t("image.original_size"))
+        btn_orig.clicked.connect(self._set_original)
+        row_presets.addWidget(btn_orig)
+
+        layout.addLayout(row_presets)
+
+        # Dimension spinboxes
+        grid = QHBoxLayout()
+        grid.setSpacing(10)
+
+        col_w = QVBoxLayout()
+        lbl_w = QLabel(t("image.width"))
+        lbl_w.setStyleSheet("font-size: 9pt;")
+        self.spin_w = QSpinBox()
+        self.spin_w.setRange(20, 5000)
+        self.spin_w.setValue(max(20, current_w))
+        col_w.addWidget(lbl_w)
+        col_w.addWidget(self.spin_w)
+        grid.addLayout(col_w)
+
+        col_h = QVBoxLayout()
+        lbl_h = QLabel(t("image.height"))
+        lbl_h.setStyleSheet("font-size: 9pt;")
+        self.spin_h = QSpinBox()
+        self.spin_h.setRange(20, 5000)
+        self.spin_h.setValue(max(20, current_h))
+        col_h.addWidget(lbl_h)
+        col_h.addWidget(self.spin_h)
+        grid.addLayout(col_h)
+
+        layout.addLayout(grid)
+
+        # Ratio checkbox
+        self.chk_ratio = QCheckBox(t("image.keep_ratio"))
+        self.chk_ratio.setChecked(True)
+        layout.addWidget(self.chk_ratio)
+
+        self.spin_w.valueChanged.connect(self._on_width_changed)
+        self.spin_h.valueChanged.connect(self._on_height_changed)
+
+        # Action buttons
+        layout.addSpacing(6)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        self.btn_del = QPushButton("🗑️ " + t("image.delete"))
+        self.btn_del.setStyleSheet("color: #ff6b6b;")
+        self.btn_del.clicked.connect(self._on_delete)
+        btn_row.addWidget(self.btn_del)
+
+        btn_row.addStretch(1)
+
+        btn_cancel = QPushButton("Anulează")
+        btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(btn_cancel)
+
+        btn_apply = QPushButton(t("image.apply"))
+        btn_apply.setObjectName("Primary")
+        btn_apply.setStyleSheet("background: #5b6cff; color: white; font-weight: bold;")
+        btn_apply.clicked.connect(self.accept)
+        btn_row.addWidget(btn_apply)
+
+        layout.addLayout(btn_row)
+
+    def _set_fit(self) -> None:
+        target_w = min(self.orig_w, self.avail_w)
+        self.spin_w.setValue(int(target_w))
+
+    def _set_original(self) -> None:
+        self.spin_w.setValue(int(self.orig_w))
+
+    def _set_percent(self, frac: float) -> None:
+        self.spin_w.setValue(max(20, int(round(self.orig_w * frac))))
+
+    def _on_width_changed(self, val: int) -> None:
+        if self.chk_ratio.isChecked() and self.aspect_ratio:
+            self.spin_h.blockSignals(True)
+            self.spin_h.setValue(max(20, int(round(val / self.aspect_ratio))))
+            self.spin_h.blockSignals(False)
+
+    def _on_height_changed(self, val: int) -> None:
+        if self.chk_ratio.isChecked() and self.aspect_ratio:
+            self.spin_w.blockSignals(True)
+            self.spin_w.setValue(max(20, int(round(val * self.aspect_ratio))))
+            self.spin_w.blockSignals(False)
+
+    def _on_delete(self) -> None:
+        self.should_delete = True
+        self.accept()
+
+    def get_dimensions(self) -> tuple[int, int]:
+        return self.spin_w.value(), self.spin_h.value()
 
 
 class RichEdit(QTextEdit):
@@ -43,18 +222,79 @@ class RichEdit(QTextEdit):
         name = hashlib.sha1(data + f"{image.width()}x{image.height()}".encode()).hexdigest()[:12] + ".png"
         path = self.paste_dir / name
         if not path.exists():
-            image.save(str(path), "PNG")
+            image.save(str(path), "PNG", quality=100)
         return path
 
-    def insert_image_file(self, path: Path, max_width: int = 900) -> None:
+    def _register_smooth_resource(self, name: str, img: QImage, w: int, h: int) -> None:
+        """Registers a high-DPI smooth-scaled pixmap resource in the document cache to eliminate pixelation."""
+        if img.isNull() or w <= 0 or h <= 0:
+            return
+        dpr = max(1.0, float(self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0))
+        target_pw = max(1, int(round(w * dpr)))
+        target_ph = max(1, int(round(h * dpr)))
+        smooth = img.scaled(
+            target_pw,
+            target_ph,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        smooth.setDevicePixelRatio(dpr)
+        self.document().addResource(QTextDocument.ResourceType.ImageResource, QUrl(name), smooth)
+
+    def insert_image_file(self, path: Path, max_width: int | None = None) -> None:
         image = QImage(str(path))
+        if image.isNull():
+            return
+
+        avail_w = max(240, self.viewport().width() - 36)
+        target_w = image.width()
+        if max_width is not None and max_width > 0:
+            target_w = min(target_w, max_width)
+        elif target_w > avail_w:
+            target_w = avail_w
+
+        target_h = max(1, int(round(image.height() * target_w / image.width())))
+
         fmt = QTextImageFormat()
         fmt.setName(Path(path).resolve().as_uri())
-        if not image.isNull() and image.width() > max_width:
-            fmt.setWidth(max_width)
-            fmt.setHeight(image.height() * max_width / image.width())
+        fmt.setWidth(target_w)
+        fmt.setHeight(target_h)
+
+        # Smooth high-DPI resource registration
+        self._register_smooth_resource(fmt.name(), image, target_w, target_h)
+
         self.textCursor().insertImage(fmt)
         self.image_added.emit()
+
+    def _constrain_all_images(self) -> None:
+        """Ensures all images in the document fit viewport width and use high-DPI smooth filtering."""
+        avail_w = max(240, self.viewport().width() - 36)
+        doc = self.document()
+        block = doc.begin()
+        while block.isValid():
+            it = block.begin()
+            while not it.atEnd():
+                frag = it.fragment()
+                fmt = frag.charFormat()
+                if fmt.isImageFormat():
+                    img_fmt = fmt.toImageFormat()
+                    src = QUrl(img_fmt.name()).toLocalFile() or img_fmt.name()
+                    img = QImage(src)
+                    if not img.isNull():
+                        curr_w = img_fmt.width()
+                        target_w = curr_w
+                        if curr_w <= 0 or curr_w > avail_w:
+                            target_w = min(img.width(), avail_w)
+                        target_h = max(1, int(round(img.height() * target_w / img.width())))
+                        img_fmt.setWidth(target_w)
+                        img_fmt.setHeight(target_h)
+                        self._register_smooth_resource(img_fmt.name(), img, target_w, target_h)
+                        cur = QTextCursor(doc)
+                        cur.setPosition(frag.position())
+                        cur.setPosition(frag.position() + frag.length(), QTextCursor.KeepAnchor)
+                        cur.setCharFormat(img_fmt)
+                it += 1
+            block = block.next()
 
     def canInsertFromMimeData(self, source: QMimeData) -> bool:
         return source.hasImage() or source.hasUrls() or super().canInsertFromMimeData(source)
@@ -77,6 +317,7 @@ class RichEdit(QTextEdit):
             html = source.html()
             html = re.sub(r'src="data:image/(png|jpe?g|gif);base64,([^"]+)"', self._data_uri_to_file, html)
             self.textCursor().insertHtml(html)
+            self._constrain_all_images()
             return
         super().insertFromMimeData(source)
 
@@ -88,6 +329,167 @@ class RichEdit(QTextEdit):
             return f'src="{self.save_image(image).as_uri()}"'
         except Exception:  # noqa: BLE001
             return m.group(0)
+
+    # ---------------------------------------------------------------- image interaction & resizing
+    def image_at_cursor(self, cursor: QTextCursor | None = None) -> tuple[QTextCursor, QTextImageFormat] | None:
+        """Finds image format under or directly adjacent to cursor position."""
+        if cursor is None:
+            cursor = self.textCursor()
+        if cursor.hasSelection() and cursor.charFormat().isImageFormat():
+            return cursor, cursor.charFormat().toImageFormat()
+        # Look 1 step to right
+        c_r = QTextCursor(cursor)
+        c_r.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
+        if c_r.charFormat().isImageFormat():
+            return c_r, c_r.charFormat().toImageFormat()
+        # Look 1 step to left
+        c_l = QTextCursor(cursor)
+        c_l.movePosition(QTextCursor.Left, QTextCursor.KeepAnchor)
+        if c_l.charFormat().isImageFormat():
+            return c_l, c_l.charFormat().toImageFormat()
+        return None
+
+    def image_at_pos(self, pos: QPoint) -> tuple[QTextCursor, QTextImageFormat] | None:
+        cursor = self.cursorForPosition(pos)
+        return self.image_at_cursor(cursor)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            found = self.image_at_pos(event.pos())
+            if found:
+                cursor, _ = found
+                self.setTextCursor(cursor)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            found = self.image_at_pos(event.pos())
+            if found:
+                self.prompt_resize_image(found)
+                return
+        super().mouseDoubleClickEvent(event)
+
+    def contextMenuEvent(self, event) -> None:
+        found = self.image_at_pos(event.pos()) or self.image_at_cursor()
+        if found:
+            cursor, fmt = found
+            self.setTextCursor(cursor)
+            menu = self.createStandardContextMenu()
+            menu.addSeparator()
+            img_menu = menu.addMenu("📐 " + t("image.menu_title"))
+            act_dlg = img_menu.addAction(t("image.resize_dialog"))
+            act_dlg.triggered.connect(lambda: self.prompt_resize_image(found))
+            act_fit = img_menu.addAction(t("image.fit_width"))
+            act_fit.triggered.connect(lambda: self.resize_image_to_fit(found))
+            act_75 = img_menu.addAction("75%")
+            act_75.triggered.connect(lambda: self.resize_image_percent(found, 0.75))
+            act_50 = img_menu.addAction("50%")
+            act_50.triggered.connect(lambda: self.resize_image_percent(found, 0.50))
+            act_25 = img_menu.addAction("25%")
+            act_25.triggered.connect(lambda: self.resize_image_percent(found, 0.25))
+            act_100 = img_menu.addAction(t("image.original_size"))
+            act_100.triggered.connect(lambda: self.resize_image_original(found))
+            img_menu.addSeparator()
+            act_del = img_menu.addAction(t("image.delete"))
+            act_del.triggered.connect(lambda: self.delete_image(found))
+            menu.exec(event.globalPos())
+            return
+        super().contextMenuEvent(event)
+
+    def prompt_resize_image(self, found: tuple[QTextCursor, QTextImageFormat] | None = None) -> bool:
+        """Opens interactive ImageResizeDialog to modify image dimensions."""
+        if found is None:
+            found = self.image_at_cursor()
+        if not found:
+            QMessageBox.information(self, "AutoTemplates", t("image.no_image_selected"))
+            return False
+        cursor, fmt = found
+        src = QUrl(fmt.name()).toLocalFile() or fmt.name()
+        img = QImage(src)
+        orig_w = img.width() if not img.isNull() else int(fmt.width() or 600)
+        orig_h = img.height() if not img.isNull() else int(fmt.height() or 400)
+        curr_w = int(fmt.width() or orig_w)
+        curr_h = int(fmt.height() or orig_h)
+        avail_w = max(240, self.viewport().width() - 36)
+
+        dlg = ImageResizeDialog(self, orig_w, orig_h, curr_w, curr_h, avail_w)
+        if dlg.exec():
+            if dlg.should_delete:
+                return self.delete_image(found)
+            w, h = dlg.get_dimensions()
+            return self.resize_image(w, h, found)
+        return False
+
+    def resize_image(
+        self,
+        width: int,
+        height: int | None = None,
+        found: tuple[QTextCursor, QTextImageFormat] | None = None,
+    ) -> bool:
+        if found is None:
+            found = self.image_at_cursor()
+        if not found:
+            return False
+        cursor, fmt = found
+        src = QUrl(fmt.name()).toLocalFile() or fmt.name()
+        image = QImage(src)
+        if not image.isNull() and image.width():
+            if height is None or height <= 0:
+                height = max(1, int(round(image.height() * width / image.width())))
+            self._register_smooth_resource(fmt.name(), image, width, height)
+        elif height is None:
+            height = max(1, int(round((fmt.height() or width) * width / (fmt.width() or width))))
+
+        fmt.setWidth(width)
+        fmt.setHeight(height)
+        cursor.setCharFormat(fmt)
+        return True
+
+    def resize_image_to_fit(self, found: tuple[QTextCursor, QTextImageFormat] | None = None) -> bool:
+        avail_w = max(240, self.viewport().width() - 36)
+        if found is None:
+            found = self.image_at_cursor()
+        if not found:
+            return False
+        _, fmt = found
+        src = QUrl(fmt.name()).toLocalFile() or fmt.name()
+        img = QImage(src)
+        orig_w = img.width() if not img.isNull() else int(fmt.width() or 600)
+        target_w = min(orig_w, avail_w)
+        return self.resize_image(target_w, None, found)
+
+    def resize_image_percent(self, found: tuple[QTextCursor, QTextImageFormat] | None, frac: float) -> bool:
+        if found is None:
+            found = self.image_at_cursor()
+        if not found:
+            return False
+        _, fmt = found
+        src = QUrl(fmt.name()).toLocalFile() or fmt.name()
+        img = QImage(src)
+        orig_w = img.width() if not img.isNull() else int(fmt.width() or 600)
+        target_w = max(20, int(round(orig_w * frac)))
+        return self.resize_image(target_w, None, found)
+
+    def resize_image_original(self, found: tuple[QTextCursor, QTextImageFormat] | None = None) -> bool:
+        if found is None:
+            found = self.image_at_cursor()
+        if not found:
+            return False
+        _, fmt = found
+        src = QUrl(fmt.name()).toLocalFile() or fmt.name()
+        img = QImage(src)
+        orig_w = img.width() if not img.isNull() else int(fmt.width() or 600)
+        orig_h = img.height() if not img.isNull() else int(fmt.height() or 400)
+        return self.resize_image(orig_w, orig_h, found)
+
+    def delete_image(self, found: tuple[QTextCursor, QTextImageFormat] | None = None) -> bool:
+        if found is None:
+            found = self.image_at_cursor()
+        if not found:
+            return False
+        cursor, _ = found
+        cursor.removeSelectedText()
+        return True
 
     def keyPressEvent(self, event) -> None:
         if event.matches(QKeySequence.Paste) and event.modifiers() & Qt.ShiftModifier:
@@ -191,10 +593,6 @@ class RichEdit(QTextEdit):
         self.merge(f)
 
     def _each_fragment(self, change) -> None:
-        """Applies ``change(format)`` (which edits it or returns a new one) to every text fragment of the selection (pictures are skipped).
-
-        Needed to *remove* a property: mergeCharFormat can only add or overwrite.
-        """
         cursor = self.textCursor()
         if not cursor.hasSelection():
             cursor.select(QTextCursor.WordUnderCursor)
@@ -215,13 +613,11 @@ class RichEdit(QTextEdit):
                 it += 1
             block = block.next()
         cursor.endEditBlock()
-        # Typing continues without the property (setCurrentCharFormat would re-apply it to a selection).
         if not self.textCursor().hasSelection() and not self.currentCharFormat().isImageFormat():
             fmt = self.currentCharFormat()
             self.setCurrentCharFormat(change(fmt) or fmt)
 
     def clear_formatting(self) -> None:
-        """Back to plain text: no colours, weight, size, font or links (pictures stay)."""
         if not self.textCursor().hasSelection():
             cursor = self.textCursor()
             cursor.select(QTextCursor.BlockUnderCursor)
@@ -356,35 +752,8 @@ class RichEdit(QTextEdit):
         cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
         cursor.endEditBlock()
 
-    def image_at_cursor(self) -> tuple[QTextCursor, QTextImageFormat] | None:
-        cursor = self.textCursor()
-        for move in (None, QTextCursor.Left, QTextCursor.Right):
-            probe = QTextCursor(cursor)
-            if move is not None:
-                probe.movePosition(move, QTextCursor.KeepAnchor if move == QTextCursor.Right else QTextCursor.MoveAnchor)
-            if move == QTextCursor.Left:
-                probe.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor)
-            fmt = probe.charFormat()
-            if fmt.isImageFormat() and probe.hasSelection():
-                return probe, fmt.toImageFormat()
-        return None
-
-    def resize_image(self, width: int) -> bool:
-        found = self.image_at_cursor()
-        if not found:
-            return False
-        cursor, fmt = found
-        image = QImage(QUrl(fmt.name()).toLocalFile() or fmt.name())
-        if not image.isNull() and image.width():
-            fmt.setHeight(image.height() * width / image.width())
-        fmt.setWidth(width)
-        cursor.setCharFormat(fmt)
-        return True
-
 
 # -------------------------------------------------------------------- saving
-
-
 def localize_images(markup: str, html_path: Path) -> str:
     """Copies every picture into ``<name>.assets`` and makes the ``src`` relative; removes unused ones."""
     assets = html_path.with_suffix(".assets")
@@ -437,12 +806,15 @@ def load_document(edit: QTextEdit, html_path: Path) -> None:
     doc.setBaseUrl(QUrl.fromLocalFile(str(html_path.parent) + "/"))
     markup = formats.read_text(html_path)
     markup = IMG_SRC_RE.sub(
-        lambda m: m.group(0) if re.match(r"^(file|https?|data):", m.group(2), re.I)
+        lambda m: m.group(0)
+        if re.match(r"^(file|https?|data):", m.group(2), re.I)
         else f"{m.group(1)}{(html_path.parent / m.group(2)).resolve().as_uri()}{m.group(3)}",
         markup,
     )
     edit.setHtml(markup)
+    if hasattr(edit, "_constrain_all_images"):
+        edit._constrain_all_images()
     doc.setModified(False)
 
 
-__all__ = ["RichEdit", "localize_images", "load_document"]
+__all__ = ["ImageResizeDialog", "RichEdit", "localize_images", "load_document"]

@@ -909,14 +909,7 @@ class EditorWindow(QMainWindow):
             self.rich.insert_image_file(Path(f))
 
     def _resize_image(self) -> None:
-        found = self.rich.image_at_cursor()
-        if not found:
-            QMessageBox.information(self, "AutoTemplates", t("fmt.resize_hint"))
-            return
-        _, fmt = found
-        width, ok = QInputDialog.getInt(self, t("fmt.resize"), t("fmt.width_px"), int(fmt.width() or 600), 16, 4000)
-        if ok:
-            self.rich.resize_image(width)
+        self.rich.prompt_resize_image()
 
     def _take_screenshot(self) -> None:
         """Windows snipping (Win+Shift+S); the picture is inserted as soon as it reaches the clipboard."""

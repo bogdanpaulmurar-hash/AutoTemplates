@@ -7,13 +7,14 @@ from pathlib import Path
 
 from PySide6.QtCore import QMimeData, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QCursor, QFont, QGuiApplication, QIcon, QKeySequence, QTextListFormat
-from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QMessageBox, QPushButton,
                                QSizePolicy, QToolBar, QToolButton,
                                QVBoxLayout, QWidget)
 
 from autotemplates.i18n import t
 from autotemplates.ui import theme
+from autotemplates.core import formats
 from autotemplates.ui.richedit import RichEdit
 
 
@@ -171,8 +172,19 @@ class NoteITWindow(QWidget):
         add_btn("numbers", "Listă numerotată", lambda: self.editor.toggle_list(QTextListFormat.ListDecimal))
         add_btn("highlight", "Evidențiere text", lambda: self.editor.set_highlight(QColor("#fff3b0")))
         add_btn("clear", "Curăță formatarea", self.editor.clear_formatting)
+        add_btn("image", "Imagine: Redimensionează sau inserează (sau dublu-click pe imagine)", self._handle_image_action)
         lay.addStretch(1)
         return w
+
+    def _handle_image_action(self) -> None:
+        found = self.editor.image_at_cursor()
+        if found:
+            self.editor.prompt_resize_image(found)
+        else:
+            exts = " ".join(f"*{e}" for e in sorted(formats.IMAGE_EXT))
+            files, _ = QFileDialog.getOpenFileNames(self, t("fmt.image"), str(Path.home() / "Pictures"), f"Images ({exts})")
+            for f in files:
+                self.editor.insert_image_file(Path(f))
 
     def _update_pin_icon(self) -> None:
         icon_name = "pin" if self.btn_pin.isChecked() else "unpin"
