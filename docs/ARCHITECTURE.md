@@ -13,14 +13,18 @@ src/autotemplates/
     formats.py         file kinds, docx → HTML, rtf → text, HTML → text, <meta> metadata
     variables.py       {date} {time} {clipboard} {input:…} {cursor} …
     highlight.py       language detection + inline-styled Pygments HTML
+    noteit_export.py   NoteIT: Outlook HTML with cid: pictures, OneNote page XML, OneNote hierarchy parsing
   platform/
     hotkey.py          RegisterHotKey on its own thread; "Ctrl+Q" parsing
     win32.py           foreground window, caret position, focus, SendInput (Ctrl+V, ←)
     autostart.py       HKCU Run entry, Start-menu shortcut, AppUserModelID
     devpilot.py        DEVPILOT_MANAGED / DEVPILOT_SUPPRESS
+    office.py          Outlook / OneNote desktop through COM (pywin32); raises OfficeUnavailable → UI fallback
   ui/
     app.py             Controller: tray, hotkey → picker → insert, watcher, actions
     picker.py          the Ctrl+Q list (built once, then shown/hidden)
+    launcher.py        optional card at the cursor on the hotkey: NoteIT or Templates
+    noteit.py          NoteIT quick-note window (draft/last note, save, Outlook, OneNote)
     content.py         template → (HTML, text, image) with a small render cache
     inserter.py        clipboard backup → HTML+text → focus target → Ctrl+V → restore
     editor.py          library tree + editors (rich / code / read-only)
@@ -44,6 +48,20 @@ src/autotemplates/
 6. After `restore_delay_ms` the old clipboard is put back.
 
 Pictures in HTML are absolute `file:///` URLs at insertion time: Word, Outlook and Teams load them while pasting.
+
+## NoteIT
+
+- Opened by its own hotkey (`noteit_hotkey`, default Ctrl+Alt+N, also via RegisterHotKey), from the launcher on the
+  main hotkey, from the picker or the tray. The launcher keeps the window and caret recorded by the hotkey thread, so
+  "Templates" still pastes into the original app.
+- State in `%LOCALAPPDATA%\AutoTemplates\noteit`: `draft.json` (autosaved every 5 s and on close) and `last.json`
+  (the last finished note). Copy, save, mail and OneNote "finish" a note: the next open starts empty.
+- Save: library sub-folder (typed or picked) or any folder; pictures go to `<name>.assets` like editor templates, so a
+  note saved in the library is a normal template.
+- Mail: Outlook COM, HTML body with pictures attached inline (`cid:`), shown for review, signature kept.
+  Fallback: `mailto:` with plain text.
+- OneNote: desktop OneNote COM (`GetHierarchy` → section picker, `CreateNewPage`, `UpdatePageContent` with HTMLBlocks
+  and base64 pictures, schema 2013). The Store/"for Windows 10" app has no COM → fallback: clipboard + `onenote:`.
 
 ## Performance
 

@@ -149,3 +149,50 @@ def test_clear_formatting_keeps_pictures(qapp, tmp_path):
     r.clear_formatting()
     html = r.toHtml()
     assert "font-weight:700" not in html and "<img" in html
+
+def test_noteit_save_draft_and_last(qapp, home):
+    from autotemplates.ui.noteit import NoteITWindow
+
+    c = _controller(qapp, home)
+    ni = c.noteit
+    img = QImage(8, 8, QImage.Format_RGB32)
+    img.fill(QColor("red"))
+    shot = ni.editor.save_image(img)
+
+    # draft survives a restart of the window
+    ni.reset_form()
+    ni.title_edit.setText("Meeting 1")
+    ni.editor.setHtml(f'<p>Body</p><img src="{shot.as_uri()}" width="8" height="8" />')
+    ni.close()
+    again = NoteITWindow(c)
+    assert again.title_edit.text() == "Meeting 1" and "Body" in again.editor.toPlainText()
+
+    # save -> library sub-folder, pictures copied next to the note, relative src
+    ni.combo_folder.setEditText("Notes/Meetings")
+    ni._save_note()
+    saved = c.library.root / "Notes" / "Meetings" / "Meeting 1.html"
+    assert saved.is_file()
+    markup = saved.read_text(encoding="utf-8")
+    assert "file:" not in markup and "Meeting 1.assets/" in markup
+    assert (saved.with_suffix(".assets") / shot.name).is_file()
+    assert not (ni.state_dir / "draft.json").exists()
+
+    # a finished note gives way to an empty one; "Last note" brings it back
+    ni.prepare_to_show()
+    assert ni.is_empty()
+    ni.restore_last()
+    assert ni.title_edit.text() == "Meeting 1"
+
+
+def test_launcher_templates_keep_hotkey_target(qapp, home, monkeypatch):
+    from autotemplates.platform import win32
+
+    c = _controller(qapp, home)
+    monkeypatch.setattr(win32, "can_receive", lambda hwnd: True)
+    monkeypatch.setattr(win32, "foreground_window", lambda: 999)  # would be the launcher itself
+    c.settings.set("launcher_enabled", True)
+    c._on_hotkey(1234, None)
+    assert c._target == 1234
+    c.launcher.templates_selected.emit()
+    assert c._target == 1234
+    c.picker.hide()

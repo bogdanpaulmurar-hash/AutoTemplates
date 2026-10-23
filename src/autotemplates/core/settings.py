@@ -17,7 +17,9 @@ DEFAULTS: dict[str, Any] = {
     "hotkey": "Ctrl+Q",
     "noteit_hotkey": "Ctrl+Alt+N",
     "noteit_stay_on_top": True,
-    "noteit_folder": "Notes",
+    "noteit_folder": "Notes",  # library sub-folder where notes are saved
+    "noteit_last_dir": "",  # last "Other location..." folder
+    "noteit_onenote_section": "",  # OneNote section ID used last
     "launcher_enabled": True,
     "language": "ro",  # ro | en
     "theme": "dark",  # dark | light

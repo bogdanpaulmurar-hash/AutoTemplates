@@ -14,6 +14,7 @@ tables and coloured code included. Runs on its own (tray icon) or inside **DevPi
 2. Apasă **Ctrl+Q** oriunde scrii, caută, **Enter** = cu formatare, **Shift+Enter** = text simplu.
 3. Template-urile se fac în editor (dublu-clic pe iconiță) sau se pun ca fișiere în `Documente\AutoTemplates`.
 4. Tasta, folderul, limba (RO/EN), aspectul și fonturile se schimbă din **Setări**.
+5. **NoteIT** (Ctrl+Alt+N sau din meniul de la Ctrl+Q): notă rapidă cu formatare și capturi. Copiere, salvare ca template, mail în Outlook sau pagină în OneNote. Ciorna se păstrează dacă închizi fereastra.
 
 ## Install
 
@@ -81,6 +82,18 @@ Open it from the tray (double-click), the list (Ctrl+E) or DevPilot.
 - **New › From clipboard** turns whatever you copied (formatted text, screenshot, code) into a template.
 - Word (`.docx`), RTF and pictures are inserted as they are; *Make an editable copy* converts them to an editor template.
 - Delete moves files to the Recycle Bin.
+
+### NoteIT
+
+A quick-note window (own hotkey, default **Ctrl+Alt+N**; also from the launcher on the main hotkey, the picker and the tray).
+Title, formatted text and screenshots, then:
+
+- **Copy & Close** (Ctrl+Enter): the note goes to the clipboard, formatted.
+- **Save** (Ctrl+S): into a library sub-folder (pick one or type a new one, e.g. `Notes/Meetings`), so it becomes a template; *Other location…* saves anywhere.
+- **Send Email**: a new Outlook mail with the formatted note and inline pictures, opened for review (needs classic Outlook; otherwise a plain `mailto:`).
+- **Send to OneNote**: pick the notebook / section, a page is created and opened (needs OneNote desktop; otherwise the note is copied and OneNote is opened).
+
+Closing the window keeps a draft. **Last note** brings back the previously finished note.
 
 ## Library folder
 

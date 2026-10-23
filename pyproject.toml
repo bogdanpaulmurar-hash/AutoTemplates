@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autotemplates"
-version = "0.2.1"
+version = "0.3.0"
 description = "Small, fast template inserter for Windows: rich text, screenshots and highlighted code at the cursor, on a hotkey."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,11 +16,13 @@ classifiers = [
     "Environment :: Win32 (MS Windows)",
     "Intended Audience :: End Users/Desktop",
 ]
-# Two small, well-maintained dependencies. docx and rtf are read with the
+# Small, well-maintained dependencies. docx and rtf are read with the
 # standard library, so no Office libraries are needed.
 dependencies = [
     "PySide6-Essentials>=6.6",
     "Pygments>=2.17",
+    # Outlook / OneNote export from NoteIT (COM); optional at runtime, Windows only.
+    "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

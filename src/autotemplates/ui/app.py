@@ -84,6 +84,7 @@ class Controller(QObject):
         self._noteit = None
         self._editor = None
         self._target = 0
+        self._launch_origin: tuple[int, object] = (0, None)
         self._hotkey_ok = False
         self._scan_lock = threading.Lock()
 
@@ -169,6 +170,9 @@ class Controller(QObject):
 
         own_picker = self._picker is not None and hwnd == int(self._picker.winId())
         self._target = hwnd if hwnd and not own_picker and win32.can_receive(hwnd) else 0
+        # Remember where the hotkey was pressed: once the launcher has the focus,
+        # the foreground window is the launcher itself, not the target app.
+        self._launch_origin = (hwnd, caret)
 
         anchor = caret_to_logical(caret[0], caret[1]) if caret else QCursor.pos()
         if self.settings.get("launcher_enabled", True):
@@ -183,7 +187,7 @@ class Controller(QObject):
 
             self._launcher = QuickLauncher(self)
             self._launcher.noteit_selected.connect(lambda: self.show_noteit())
-            self._launcher.templates_selected.connect(lambda: self.show_picker())
+            self._launcher.templates_selected.connect(lambda: self.show_picker(*self._launch_origin))
         return self._launcher
 
     def show_launcher(self, anchor: QPoint | None = None) -> None:
@@ -206,8 +210,12 @@ class Controller(QObject):
         if self._picker is not None and self._picker.isVisible():
             self._picker.hide()
         ni = self.noteit
-        if not ni.isVisible() or title or content_html:
+        if title or content_html:
+            if not ni.is_empty() and not ni._finished:
+                ni._store_last()  # do not lose the current draft: "Last note" brings it back
             ni.reset_form(title, content_html)
+        elif not ni.isVisible():
+            ni.prepare_to_show()
         ni.show_and_raise()
         try:
             win32.focus_window(int(ni.winId()))
