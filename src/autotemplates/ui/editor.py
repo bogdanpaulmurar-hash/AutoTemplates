@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QFile, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import (QAction, QActionGroup, QColor, QDesktopServices, QFont, QGuiApplication, QKeySequence,
-                           QTextCharFormat, QTextListFormat)
+                           QTextCharFormat)
 from PySide6.QtWidgets import (QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFontComboBox,
                                QFormLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu,
                                QMessageBox, QPushButton, QSpinBox, QSplitter, QStackedWidget, QTextBrowser, QToolBar,
@@ -20,7 +20,7 @@ from autotemplates.i18n import t
 from autotemplates.ui import theme
 from autotemplates.ui.codeedit import CodeEdit
 from autotemplates.ui.content import absolutize_images
-from autotemplates.ui.richedit import RichEdit, load_document, localize_images
+from autotemplates.ui.richedit import RichEdit, load_document, localize_images, with_shortcut
 
 log = logging.getLogger(__name__)
 
@@ -272,6 +272,20 @@ class EditorWindow(QMainWindow):
         bar.addAction(a)
         return a
 
+    def _fmt(self, bar: QToolBar, icon: str, tip: str, name: str, *, checkable=False) -> QAction:
+        """Toolbar button for a RichEdit formatting command; the shortcut itself is handled by RichEdit."""
+        a = QAction(theme.glyph_icon(icon), t(tip), self)
+        a.setCheckable(checkable)
+        a.setToolTip(with_shortcut(t(tip), name))
+        a.triggered.connect(lambda _=False, n=name: self._run_format(n))
+        bar.addAction(a)
+        return a
+
+    def _run_format(self, name: str) -> None:
+        self.rich.run_format(name)
+        self._sync_char(self.rich.currentCharFormat())
+        self._sync_block()
+
     def _rich_toolbar(self) -> QWidget:
         holder = QWidget()
         lay = QVBoxLayout(holder)
@@ -288,6 +302,7 @@ class EditorWindow(QMainWindow):
         self.style_box = QComboBox()
         for label, level in ((t("fmt.normal"), 0), (t("fmt.h1"), 1), (t("fmt.h2"), 2), (t("fmt.h3"), 3)):
             self.style_box.addItem(label, level)
+        self.style_box.setToolTip(t("fmt.style_tip"))
         self.style_box.activated.connect(lambda: (r.set_heading(self.style_box.currentData()), r.setFocus()))
         bar1.addWidget(self.style_box)
         self.font_box = QFontComboBox()
@@ -302,29 +317,29 @@ class EditorWindow(QMainWindow):
         self.size_box.textActivated.connect(lambda s: (r.set_size(float(s)) if s.replace(".", "").isdigit() else None, r.setFocus()))
         bar1.addWidget(self.size_box)
         bar1.addSeparator()
-        self.a_bold = self._act(bar1, "bold", "fmt.bold", lambda on: r.set_bold(on), checkable=True, shortcut="Ctrl+B")
-        self.a_italic = self._act(bar1, "italic", "fmt.italic", lambda on: r.set_italic(on), checkable=True, shortcut="Ctrl+I")
-        self.a_under = self._act(bar1, "underline", "fmt.underline", lambda on: r.set_underline(on), checkable=True, shortcut="Ctrl+U")
-        self.a_strike = self._act(bar1, "strike", "fmt.strike", lambda on: r.set_strike(on), checkable=True, shortcut="Ctrl+Shift+X")
-        self._act(bar1, "superscript", "fmt.superscript", lambda: r.set_vertical(QTextCharFormat.AlignSuperScript), shortcut="Ctrl+Shift+=")
-        self._act(bar1, "subscript", "fmt.subscript", lambda: r.set_vertical(QTextCharFormat.AlignSubScript), shortcut="Ctrl+=")
+        self.a_bold = self._fmt(bar1, "bold", "fmt.bold", "bold", checkable=True)
+        self.a_italic = self._fmt(bar1, "italic", "fmt.italic", "italic", checkable=True)
+        self.a_under = self._fmt(bar1, "underline", "fmt.underline", "underline", checkable=True)
+        self.a_strike = self._fmt(bar1, "strike", "fmt.strike", "strike", checkable=True)
+        self._fmt(bar1, "superscript", "fmt.superscript", "superscript")
+        self._fmt(bar1, "subscript", "fmt.subscript", "subscript")
         bar1.addSeparator()
         self.color_btn = self._color_button(bar1, "fmt.color", PRESET_COLORS, r.set_color, "A")
         self.hl_btn = self._color_button(bar1, "fmt.highlight", HIGHLIGHTS, r.set_highlight, "H")
-        self._act(bar1, "clear", "fmt.clear", r.clear_formatting, shortcut="Ctrl+Space")
+        bar1.addWidget(self._clear_button())
 
         group = QActionGroup(self)
         self.a_align = {}
-        for icon, tip, align, sc in (("left", "fmt.left", Qt.AlignLeft, "Ctrl+L"), ("center", "fmt.center", Qt.AlignHCenter, "Ctrl+E"),
-                                     ("right", "fmt.right", Qt.AlignRight, "Ctrl+R"), ("justify", "fmt.justify", Qt.AlignJustify, "Ctrl+J")):
-            a = self._act(bar2, icon, tip, lambda _=False, al=align: r.set_alignment(al), checkable=True, shortcut=sc)
+        for icon, tip, align, name in (("left", "fmt.left", Qt.AlignLeft, "left"), ("center", "fmt.center", Qt.AlignHCenter, "center"),
+                                       ("right", "fmt.right", Qt.AlignRight, "right"), ("justify", "fmt.justify", Qt.AlignJustify, "justify")):
+            a = self._fmt(bar2, icon, tip, name, checkable=True)
             group.addAction(a)
             self.a_align[align] = a
         bar2.addSeparator()
-        self._act(bar2, "bullets", "fmt.bullets", lambda: r.toggle_list(QTextListFormat.ListDisc), shortcut="Ctrl+Shift+8")
-        self._act(bar2, "numbers", "fmt.numbers", lambda: r.toggle_list(QTextListFormat.ListDecimal), shortcut="Ctrl+Shift+7")
-        self._act(bar2, "outdent", "fmt.outdent", lambda: r.change_indent(-1), shortcut="Ctrl+[")
-        self._act(bar2, "indent", "fmt.indent", lambda: r.change_indent(1), shortcut="Ctrl+]")
+        self._fmt(bar2, "bullets", "fmt.bullets", "bullets")
+        self._fmt(bar2, "numbers", "fmt.numbers", "numbers")
+        self._fmt(bar2, "outdent", "fmt.outdent", "outdent")
+        self._fmt(bar2, "indent", "fmt.indent", "indent")
         spacing = QToolButton()
         spacing.setIcon(theme.glyph_icon("spacing"))
         spacing.setToolTip(t("fmt.spacing"))
@@ -338,7 +353,7 @@ class EditorWindow(QMainWindow):
         spacing.setMenu(menu)
         bar2.addWidget(spacing)
         bar2.addSeparator()
-        self._act(bar2, "link", "fmt.link", self._insert_link, shortcut="Ctrl+K")
+        self._fmt(bar2, "link", "fmt.link", "link")
         table = QToolButton()
         table.setIcon(theme.glyph_icon("table"))
         table.setToolTip(t("fmt.table"))
@@ -356,7 +371,8 @@ class EditorWindow(QMainWindow):
         bar2.addSeparator()
         self._act(bar2, "image", "fmt.image", self._insert_image)
         self._act(bar2, "screenshot", "fmt.screenshot", self._take_screenshot)
-        self._act(bar2, "resize", "fmt.resize", self._resize_image)
+        a_resize = self._act(bar2, "resize", "fmt.resize", self._resize_image)
+        a_resize.setToolTip(t("fmt.resize_tip"))
         self._act(bar2, "code", "fmt.code", self._insert_code, shortcut="Ctrl+Shift+K")
         var = QToolButton()
         var.setIcon(theme.glyph_icon("variable"))
@@ -365,6 +381,20 @@ class EditorWindow(QMainWindow):
         var.setMenu(self._variables_menu(var))
         bar2.addWidget(var)
         return holder
+
+    def _clear_button(self) -> QToolButton:
+        """Clear formatting: click = selection/paragraph; menu = whole document or paste as plain text."""
+        btn = QToolButton()
+        btn.setIcon(theme.glyph_icon("clear"))
+        btn.setToolTip(with_shortcut(t("fmt.clear"), "clear"))
+        btn.setPopupMode(QToolButton.MenuButtonPopup)
+        btn.clicked.connect(lambda: self._run_format("clear"))
+        menu = QMenu(btn)
+        menu.addAction(with_shortcut(t("fmt.clear"), "clear"), lambda: self._run_format("clear"))
+        menu.addAction(t("fmt.clear_all"), lambda: (self.rich.clear_all_formatting(), self._sync_block()))
+        menu.addAction(with_shortcut(t("fmt.paste_plain"), "paste_plain"), lambda: self._run_format("paste_plain"))
+        btn.setMenu(menu)
+        return btn
 
     def _color_button(self, bar: QToolBar, tip: str, colors: list[str], apply, letter: str) -> QToolButton:
         btn = QToolButton()
@@ -874,10 +904,7 @@ class EditorWindow(QMainWindow):
         self.style_box.setCurrentIndex(max(0, self.style_box.findData(cursor.blockFormat().headingLevel())))
 
     def _insert_link(self) -> None:
-        cursor = self.rich.textCursor()
-        url, ok = QInputDialog.getText(self, t("fmt.link"), "URL:", text=cursor.charFormat().anchorHref() or "https://")
-        if ok and url.strip():
-            self.rich.insert_link(url.strip())
+        self.rich.prompt_link()
 
     def _insert_table(self) -> None:
         dlg = QDialog(self)
@@ -944,6 +971,8 @@ class EditorWindow(QMainWindow):
         menu = self.rich.createStandardContextMenu(pos)
         menu.addSeparator()
         menu.addAction(t("fmt.paste_plain") + "\tCtrl+Shift+V", self.rich.paste_plain)
+        menu.addAction(t("fmt.clear") + "\tCtrl+Space", lambda: self._run_format("clear"))
+        menu.addAction(t("fmt.clear_all"), self.rich.clear_all_formatting)
         if self.rich.textCursor().currentTable() is not None:
             tm = menu.addMenu(t("fmt.table"))
             for op, key in (("row_above", "fmt.row_above"), ("row_below", "fmt.row_below"), ("col_left", "fmt.col_left"),

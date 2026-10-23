@@ -74,7 +74,10 @@ Open it from the tray (double-click), the list (Ctrl+E) or DevPilot.
   highlight/background, clear formatting, alignment, line spacing, paragraph spacing, bulleted and numbered lists,
   indentation, links, tables (rows/columns/cell colour), horizontal line.
 - **Pictures:** paste a screenshot (Ctrl+V), drag a file in, insert from file, or use the camera button
-  (Windows snipping, the capture is inserted automatically). Resize from the right-click menu.
+  (Windows snipping, the capture is inserted automatically). Resize: click the picture and drag its corner,
+  double-click it, or use the right-click menu.
+- **Clear formatting** (Ctrl+Space) removes character and paragraph styles from the selection; its menu also
+  clears the whole document or pastes as plain text (Ctrl+Shift+V). Pictures and links stay.
 - **Code:** *Coloured code block* detects the language (Python, JSON, C#, JS/TS, SQL, XML/HTML, YAML,
   PowerShell, Batch, Bash, CSS, C/C++, Java, Markdown…) and inserts it coloured. Code and text files are edited
   with live syntax colouring.
@@ -82,6 +85,18 @@ Open it from the tray (double-click), the list (Ctrl+E) or DevPilot.
 - **New › From clipboard** turns whatever you copied (formatted text, screenshot, code) into a template.
 - Word (`.docx`), RTF and pictures are inserted as they are; *Make an editable copy* converts them to an editor template.
 - Delete moves files to the Recycle Bin.
+
+Formatting shortcuts (template editor and NoteIT):
+
+| Keys | |
+|---|---|
+| Ctrl+B · Ctrl+I · Ctrl+U · Ctrl+Shift+X | bold · italic · underline · strikethrough (whole selection, like Word) |
+| Ctrl+Shift+= · Ctrl+= | superscript · subscript |
+| Ctrl+Shift+L · Ctrl+Shift+O | bulleted · numbered list |
+| Ctrl+M · Ctrl+Shift+M | indent · outdent |
+| Ctrl+Alt+1/2/3 · Ctrl+Shift+N | heading 1/2/3 · normal |
+| Ctrl+L · Ctrl+E · Ctrl+R · Ctrl+J | align left · centre · right · justify |
+| Ctrl+K · Ctrl+Space · Ctrl+Shift+V | link · clear formatting · paste as plain text |
 
 ### NoteIT
 

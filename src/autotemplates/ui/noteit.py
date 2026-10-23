@@ -15,15 +15,15 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QMimeData, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication, QTextListFormat
+from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
-                               QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
+                               QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton,
                                QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 
 from autotemplates.core import formats
 from autotemplates.i18n import t
 from autotemplates.ui import theme
-from autotemplates.ui.richedit import RichEdit, localize_images
+from autotemplates.ui.richedit import RichEdit, localize_images, with_shortcut
 
 log = logging.getLogger(__name__)
 
@@ -183,31 +183,47 @@ class NoteITWindow(QWidget):
         lay = QHBoxLayout(w)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(2)
-        for icon, tip, slot in (
-            ("bold", t("noteit.fmt_bold"), self.editor.toggle_bold),
-            ("italic", t("noteit.fmt_italic"), self.editor.toggle_italic),
-            ("underline", t("noteit.fmt_underline"), self.editor.toggle_underline),
-            ("strike", t("noteit.fmt_strike"), self.editor.toggle_strike),
-            ("bullets", t("noteit.fmt_bullets"), lambda: self.editor.toggle_list(QTextListFormat.ListDisc)),
-            ("numbers", t("noteit.fmt_numbers"), lambda: self.editor.toggle_list(QTextListFormat.ListDecimal)),
-            ("highlight", t("noteit.fmt_highlight"), lambda: self.editor.set_highlight(QColor("#fff3b0"))),
-            ("clear", t("noteit.fmt_clear"), self.editor.clear_formatting),
-            ("image", t("noteit.fmt_image"), self._handle_image_action),
+        for icon, tip, name in (
+            ("bold", "noteit.fmt_bold", "bold"),
+            ("italic", "noteit.fmt_italic", "italic"),
+            ("underline", "noteit.fmt_underline", "underline"),
+            ("strike", "noteit.fmt_strike", "strike"),
+            ("bullets", "noteit.fmt_bullets", "bullets"),
+            ("numbers", "noteit.fmt_numbers", "numbers"),
         ):
-            lay.addWidget(self._tool_button(icon, tip, slot))
+            lay.addWidget(self._tool_button(icon, with_shortcut(t(tip), name), lambda n=name: self.editor.run_format(n)))
+        lay.addWidget(self._tool_button("highlight", t("noteit.fmt_highlight"),
+                                        lambda: self.editor.set_highlight(QColor("#fff3b0"))))
+        lay.addWidget(self._clear_button())
+        lay.addWidget(self._tool_button("image", t("noteit.fmt_image"), self._insert_image))
+        lay.addWidget(self._tool_button("resize", t("fmt.resize_tip"), lambda: self.editor.prompt_resize_image()))
+        hint = QLabel(t("noteit.shortcuts_hint"))
+        hint.setToolTip(t("noteit.shortcuts_tip"))
+        hint.setStyleSheet("color: #9a9eab; font-size: 8.5pt;")
+        lay.addSpacing(6)
+        lay.addWidget(hint)
         lay.addStretch(1)
         return w
 
-    def _handle_image_action(self) -> None:
-        found = self.editor.image_at_cursor()
-        if found:
-            self.editor.prompt_resize_image(found)
-            return
+    def _insert_image(self) -> None:
         exts = " ".join(f"*{e}" for e in sorted(formats.IMAGE_EXT))
         files, _ = QFileDialog.getOpenFileNames(self, t("fmt.image"), str(Path.home() / "Pictures"),
                                                 f"Images ({exts})")
         for f in files:
             self.editor.insert_image_file(Path(f))
+
+    def _clear_button(self) -> QToolButton:
+        btn = QToolButton()
+        btn.setIcon(theme.glyph_icon("clear"))
+        btn.setToolTip(with_shortcut(t("noteit.fmt_clear"), "clear"))
+        btn.setPopupMode(QToolButton.MenuButtonPopup)
+        btn.clicked.connect(lambda: self.editor.run_format("clear"))
+        menu = QMenu(btn)
+        menu.addAction(with_shortcut(t("fmt.clear"), "clear"), lambda: self.editor.run_format("clear"))
+        menu.addAction(t("fmt.clear_all"), self.editor.clear_all_formatting)
+        menu.addAction(with_shortcut(t("fmt.paste_plain"), "paste_plain"), lambda: self.editor.run_format("paste_plain"))
+        btn.setMenu(menu)
+        return btn
 
     def _update_pin_icon(self) -> None:
         self.btn_pin.setIcon(theme.glyph_icon("pin" if self.btn_pin.isChecked() else "unpin"))

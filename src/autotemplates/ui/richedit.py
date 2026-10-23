@@ -8,13 +8,15 @@ import re
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, QPoint, QUrl, Qt, Signal
+from PySide6.QtCore import QEvent, QKeyCombination, QMimeData, QPoint, QRect, QUrl, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
     QImage,
     QKeySequence,
+    QPainter,
+    QPen,
     QPixmap,
     QTextBlockFormat,
     QTextCharFormat,
@@ -30,6 +32,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMenu,
     QMessageBox,
@@ -46,6 +49,52 @@ log = logging.getLogger(__name__)
 
 IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=")([^"]+)(")', re.I)
 HEADING_SIZES = {1: 20, 2: 16, 3: 13}
+
+# Formatting shortcuts handled by RichEdit itself (template editor and NoteIT alike).
+# Word-like where possible; chosen to be independent of the keyboard layout (no [ ] or Shift+digit).
+# The first sequence is the one shown in tooltips.
+FORMAT_SHORTCUTS: dict[str, tuple[str, ...]] = {
+    "bold": ("Ctrl+B",),
+    "italic": ("Ctrl+I",),
+    "underline": ("Ctrl+U",),
+    "strike": ("Ctrl+Shift+X",),
+    "superscript": ("Ctrl+Shift+=", "Ctrl+Shift++", "Ctrl++"),
+    "subscript": ("Ctrl+=",),
+    "clear": ("Ctrl+Space",),
+    "bullets": ("Ctrl+Shift+L",),
+    "numbers": ("Ctrl+Shift+O",),
+    "indent": ("Ctrl+M",),
+    "outdent": ("Ctrl+Shift+M",),
+    "h1": ("Ctrl+Alt+1",),
+    "h2": ("Ctrl+Alt+2",),
+    "h3": ("Ctrl+Alt+3",),
+    "normal": ("Ctrl+Shift+N",),
+    "left": ("Ctrl+L",),
+    "center": ("Ctrl+E",),
+    "right": ("Ctrl+R",),
+    "justify": ("Ctrl+J",),
+    "link": ("Ctrl+K",),
+    "paste_plain": ("Ctrl+Shift+V",),
+}
+_KEYMAP: dict[str, str] = {
+    QKeySequence(seq).toString(QKeySequence.PortableText): name
+    for name, seqs in FORMAT_SHORTCUTS.items()
+    for seq in seqs
+}
+_MODIFIER_KEYS = {Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr}
+HANDLE = 10  # px, size of the image resize handle
+
+
+def shortcut_text(name: str) -> str:
+    """Display text of the main shortcut of a formatting command ("Ctrl+B")."""
+    seqs = FORMAT_SHORTCUTS.get(name)
+    return QKeySequence(seqs[0]).toString(QKeySequence.NativeText) if seqs else ""
+
+
+def with_shortcut(label: str, name: str) -> str:
+    """Tooltip text: "Bold (Ctrl+B)"."""
+    sc = shortcut_text(name)
+    return f"{label} ({sc})" if sc else label
 
 
 class ImageResizeDialog(QDialog):
@@ -214,6 +263,10 @@ class RichEdit(QTextEdit):
         self.setObjectName("Paper")  # white page like Word/Outlook, whatever the app theme
         self.setTabChangesFocus(False)
         self.document().setDocumentMargin(14)
+        self._active_image: int | None = None  # document position of the selected picture
+        self._drag: tuple[QPoint, int, int, float] | None = None  # start pos, width, height, ratio
+        self.cursorPositionChanged.connect(self._track_image)
+        self.selectionChanged.connect(self._track_image)
 
     # ---------------------------------------------------------------- pictures
     def save_image(self, image: QImage) -> Path:
@@ -353,13 +406,116 @@ class RichEdit(QTextEdit):
         cursor = self.cursorForPosition(pos)
         return self.image_at_cursor(cursor)
 
+    def _image_at_doc_pos(self, pos: int) -> tuple[QTextCursor, QTextImageFormat] | None:
+        cursor = QTextCursor(self.document())
+        if pos < 0 or pos + 1 >= self.document().characterCount():
+            return None
+        cursor.setPosition(pos)
+        cursor.setPosition(pos + 1, QTextCursor.KeepAnchor)
+        fmt = cursor.charFormat()
+        return (cursor, fmt.toImageFormat()) if fmt.isImageFormat() else None
+
+    def _image_rect(self, pos: int) -> QRect | None:
+        """Viewport rectangle of the picture at document position *pos* (approximate for inline images)."""
+        found = self._image_at_doc_pos(pos)
+        if not found:
+            return None
+        _, fmt = found
+        c = QTextCursor(self.document())
+        c.setPosition(pos)
+        left = self.cursorRect(c)
+        c.setPosition(pos + 1)
+        right = self.cursorRect(c)
+        w = int(fmt.width()) or max(1, right.left() - left.left())
+        h = int(fmt.height()) or left.height()
+        return QRect(left.left(), left.bottom() - h + 1, w, h)
+
+    def _handle_rect(self) -> QRect | None:
+        if self._active_image is None:
+            return None
+        rect = self._image_rect(self._active_image)
+        if rect is None:
+            return None
+        return QRect(rect.right() - HANDLE + 2, rect.bottom() - HANDLE + 2, HANDLE, HANDLE)
+
+    def _track_image(self) -> None:
+        cursor = self.textCursor()
+        pos = None
+        if cursor.hasSelection() and cursor.selectionEnd() - cursor.selectionStart() == 1:
+            if self._image_at_doc_pos(cursor.selectionStart()):
+                pos = cursor.selectionStart()
+        if pos != self._active_image:
+            self._active_image = pos
+            self.viewport().update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._active_image is None:
+            return
+        rect = self._image_rect(self._active_image)
+        if rect is None:
+            return
+        p = QPainter(self.viewport())
+        accent = QColor("#2f6feb")
+        pen = QPen(accent)
+        pen.setStyle(Qt.DashLine)
+        p.setPen(pen)
+        p.drawRect(rect.adjusted(0, 0, -1, -1))
+        p.fillRect(QRect(rect.right() - HANDLE + 2, rect.bottom() - HANDLE + 2, HANDLE, HANDLE), accent)
+        p.end()
+
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
+            handle = self._handle_rect()
+            if handle is not None and handle.adjusted(-3, -3, 3, 3).contains(event.pos()):
+                found = self._image_at_doc_pos(self._active_image)
+                if found:
+                    _, fmt = found
+                    w = int(fmt.width()) or 100
+                    h = int(fmt.height()) or 100
+                    self._drag = (event.pos(), w, h, w / max(1, h))
+                    event.accept()
+                    return
             found = self.image_at_pos(event.pos())
             if found:
                 cursor, _ = found
                 self.setTextCursor(cursor)
+                event.accept()
+                return
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag is not None and self._active_image is not None:
+            start, w, h, ratio = self._drag
+            found = self._image_at_doc_pos(self._active_image)
+            if found:
+                cursor, fmt = found
+                new_w = max(20, w + event.pos().x() - start.x())
+                fmt.setWidth(new_w)
+                fmt.setHeight(max(1, int(round(new_w / ratio))))
+                cursor.setCharFormat(fmt)  # cheap preview; smooth scaling on release
+                self.viewport().update()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+        handle = self._handle_rect()
+        if handle is not None and handle.adjusted(-3, -3, 3, 3).contains(event.pos()):
+            self.viewport().setCursor(Qt.SizeFDiagCursor)
+        elif self.viewport().cursor().shape() == Qt.SizeFDiagCursor:
+            self.viewport().setCursor(Qt.IBeamCursor)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._drag is not None:
+            self._drag = None
+            if self._active_image is not None:
+                found = self._image_at_doc_pos(self._active_image)
+                if found:
+                    _, fmt = found
+                    self.resize_image(int(fmt.width()), int(fmt.height()), found)
+                    self.document().setModified(True)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -491,40 +647,101 @@ class RichEdit(QTextEdit):
         cursor.removeSelectedText()
         return True
 
+    # ---------------------------------------------------------------- shortcuts
+    def format_command(self, event) -> str | None:
+        """Name of the formatting command for a key event, or None (see FORMAT_SHORTCUTS)."""
+        if self.isReadOnly():
+            return None
+        key = event.key()
+        mods = event.modifiers() & ~Qt.KeypadModifier
+        if key in _MODIFIER_KEYS or not (mods & Qt.ControlModifier):
+            return None
+        ctrl_alt = Qt.ControlModifier | Qt.AltModifier
+        text = event.text()
+        if (mods & ctrl_alt) == ctrl_alt and text and text.isprintable():
+            base = chr(key).lower() if key < 0x80 else ""
+            if text.lower() != base:
+                return None  # AltGr produced a character (ă, î, ~ …): typing wins
+        seq = QKeySequence(QKeyCombination(mods, Qt.Key(key))).toString(QKeySequence.PortableText)
+        return _KEYMAP.get(seq)
+
+    def event(self, e) -> bool:
+        # Claim our shortcuts before window-level actions (Ctrl+S, Ctrl+N …) or global ones can take them.
+        if e.type() == QEvent.ShortcutOverride and self.format_command(e):
+            e.accept()
+            return True
+        return super().event(e)
+
     def keyPressEvent(self, event) -> None:
-        if event.matches(QKeySequence.Paste) and event.modifiers() & Qt.ShiftModifier:
-            self.paste_plain()
-            return
-        # Support MS Office / Windows standard rich text formatting shortcuts
-        if event.matches(QKeySequence.Bold) or (event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_B):
-            self.toggle_bold()
-            return
-        if event.matches(QKeySequence.Italic) or (event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_I):
-            self.toggle_italic()
-            return
-        if event.matches(QKeySequence.Underline) or (event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_U):
-            self.toggle_underline()
-            return
-        if event.modifiers() == (Qt.ControlModifier | Qt.ShiftModifier) and event.key() == Qt.Key_X:
-            self.toggle_strike()
+        cmd = self.format_command(event)
+        if cmd:
+            self.run_format(cmd)
+            event.accept()
             return
         super().keyPressEvent(event)
 
+    def run_format(self, name: str) -> None:
+        """Runs a formatting command by name; used by shortcuts and toolbar buttons."""
+        actions = {
+            "bold": self.toggle_bold,
+            "italic": self.toggle_italic,
+            "underline": self.toggle_underline,
+            "strike": self.toggle_strike,
+            "superscript": lambda: self.set_vertical(QTextCharFormat.AlignSuperScript),
+            "subscript": lambda: self.set_vertical(QTextCharFormat.AlignSubScript),
+            "clear": self.clear_formatting,
+            "bullets": lambda: self.toggle_list(QTextListFormat.ListDisc),
+            "numbers": lambda: self.toggle_list(QTextListFormat.ListDecimal),
+            "indent": lambda: self.change_indent(1),
+            "outdent": lambda: self.change_indent(-1),
+            "h1": lambda: self.set_heading(1),
+            "h2": lambda: self.set_heading(2),
+            "h3": lambda: self.set_heading(3),
+            "normal": lambda: self.set_heading(0),
+            "left": lambda: self.set_alignment(Qt.AlignLeft),
+            "center": lambda: self.set_alignment(Qt.AlignHCenter),
+            "right": lambda: self.set_alignment(Qt.AlignRight),
+            "justify": lambda: self.set_alignment(Qt.AlignJustify),
+            "link": self.prompt_link,
+            "paste_plain": self.paste_plain,
+        }
+        fn = actions.get(name)
+        if fn is not None:
+            fn()
+            self.setFocus()
+
+    def _all_selected(self, test) -> bool:
+        """True when every text fragment of the selection passes *test* (Word-like toggling)."""
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return bool(test(self.currentCharFormat()))
+        start, end = cursor.selectionStart(), cursor.selectionEnd()
+        seen = False
+        block = self.document().findBlock(start)
+        while block.isValid() and block.position() < end:
+            it = block.begin()
+            while not it.atEnd():
+                frag = it.fragment()
+                a, b = max(start, frag.position()), min(end, frag.position() + frag.length())
+                if a < b and not frag.charFormat().isImageFormat():
+                    if not test(frag.charFormat()):
+                        return False
+                    seen = True
+                it += 1
+            block = block.next()
+        return seen
+
     def toggle_bold(self) -> None:
-        is_bold = self.fontWeight() >= QFont.DemiBold or self.currentCharFormat().fontWeight() >= QFont.DemiBold
-        self.set_bold(not is_bold)
+        self.set_bold(not self._all_selected(lambda f: f.fontWeight() >= QFont.DemiBold))
 
     def toggle_italic(self) -> None:
-        is_italic = self.fontItalic() or self.currentCharFormat().fontItalic()
-        self.set_italic(not is_italic)
+        self.set_italic(not self._all_selected(lambda f: f.fontItalic()))
 
     def toggle_underline(self) -> None:
-        is_under = self.fontUnderline() or self.currentCharFormat().fontUnderline()
-        self.set_underline(not is_under)
+        self.set_underline(not self._all_selected(lambda f: f.fontUnderline()))
 
     def toggle_strike(self) -> None:
-        is_strike = self.currentCharFormat().fontStrikeOut()
-        self.set_strike(not is_strike)
+        self.set_strike(not self._all_selected(lambda f: f.fontStrikeOut()))
 
     def paste_plain(self) -> None:
         from PySide6.QtGui import QGuiApplication
@@ -618,11 +835,43 @@ class RichEdit(QTextEdit):
             self.setCurrentCharFormat(change(fmt) or fmt)
 
     def clear_formatting(self) -> None:
-        if not self.textCursor().hasSelection():
-            cursor = self.textCursor()
+        """Removes character and paragraph formatting from the selection (or the current paragraph).
+
+        Pictures and links stay; headings, lists, alignment, spacing and indents go.
+        """
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
             cursor.select(QTextCursor.BlockUnderCursor)
             self.setTextCursor(cursor)
-        self._each_fragment(lambda f: QTextCharFormat())
+        start, end = cursor.selectionStart(), cursor.selectionEnd()
+
+        def plain(fmt: QTextCharFormat) -> QTextCharFormat:
+            clean = QTextCharFormat()
+            if fmt.isAnchor():
+                clean.setAnchor(True)
+                clean.setAnchorHref(fmt.anchorHref())
+            return clean
+
+        cursor.beginEditBlock()
+        self._each_fragment(plain)
+        block = self.document().findBlock(start)
+        while block.isValid() and block.position() <= end:
+            lst = block.textList()
+            if lst is not None:
+                lst.remove(block)
+            QTextCursor(block).setBlockFormat(QTextBlockFormat())
+            block = block.next()
+        cursor.endEditBlock()
+
+    def clear_all_formatting(self) -> None:
+        """Clear formatting for the whole document (e.g. text pasted with unwanted styles)."""
+        cursor = self.textCursor()
+        cursor.select(QTextCursor.Document)
+        self.setTextCursor(cursor)
+        self.clear_formatting()
+        cursor = self.textCursor()
+        cursor.clearSelection()
+        self.setTextCursor(cursor)
 
     # ---------------------------------------------------------------- blocks
     def _merge_block(self, fmt: QTextBlockFormat) -> None:
@@ -668,6 +917,10 @@ class RichEdit(QTextEdit):
             bf = cursor.blockFormat()
             bf.setIndent(0)
             cursor.setBlockFormat(bf)
+        elif current is not None:
+            lf = current.format()  # other list type: switch it, like Word (no nesting)
+            lf.setStyle(style)
+            current.setFormat(lf)
         else:
             lf = QTextListFormat()
             lf.setStyle(style)
@@ -688,6 +941,12 @@ class RichEdit(QTextEdit):
         cursor.setBlockFormat(bf)
 
     # ---------------------------------------------------------------- inserts
+    def prompt_link(self) -> None:
+        url, ok = QInputDialog.getText(self, t("fmt.link"), "URL:",
+                                       text=self.textCursor().charFormat().anchorHref() or "https://")
+        if ok and url.strip():
+            self.insert_link(url.strip())
+
     def insert_link(self, url: str, text: str = "") -> None:
         cursor = self.textCursor()
         label = text or cursor.selectedText() or url
