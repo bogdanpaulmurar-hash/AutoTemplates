@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 )
 
 from autotemplates.core import formats
+from autotemplates.core.shortcuts import FORMAT_SHORTCUTS
 from autotemplates.i18n import t
 
 log = logging.getLogger(__name__)
@@ -50,32 +51,7 @@ log = logging.getLogger(__name__)
 IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=")([^"]+)(")', re.I)
 HEADING_SIZES = {1: 20, 2: 16, 3: 13}
 
-# Formatting shortcuts handled by RichEdit itself (template editor and NoteIT alike).
-# Word-like where possible; chosen to be independent of the keyboard layout (no [ ] or Shift+digit).
-# The first sequence is the one shown in tooltips.
-FORMAT_SHORTCUTS: dict[str, tuple[str, ...]] = {
-    "bold": ("Ctrl+B",),
-    "italic": ("Ctrl+I",),
-    "underline": ("Ctrl+U",),
-    "strike": ("Ctrl+Shift+X",),
-    "superscript": ("Ctrl+Shift+=", "Ctrl+Shift++", "Ctrl++"),
-    "subscript": ("Ctrl+=",),
-    "clear": ("Ctrl+Space",),
-    "bullets": ("Ctrl+Shift+L",),
-    "numbers": ("Ctrl+Shift+O",),
-    "indent": ("Ctrl+M",),
-    "outdent": ("Ctrl+Shift+M",),
-    "h1": ("Ctrl+Alt+1",),
-    "h2": ("Ctrl+Alt+2",),
-    "h3": ("Ctrl+Alt+3",),
-    "normal": ("Ctrl+Shift+N",),
-    "left": ("Ctrl+L",),
-    "center": ("Ctrl+E",),
-    "right": ("Ctrl+R",),
-    "justify": ("Ctrl+J",),
-    "link": ("Ctrl+K",),
-    "paste_plain": ("Ctrl+Shift+V",),
-}
+# Formatting shortcuts live in core/shortcuts.py (the in-app guide lists them too).
 _KEYMAP: dict[str, str] = {
     QKeySequence(seq).toString(QKeySequence.PortableText): name
     for name, seqs in FORMAT_SHORTCUTS.items()

@@ -18,6 +18,14 @@ from datetime import datetime
 from typing import Callable
 
 VAR_RE = re.compile(r"\{(date|time|datetime|weekday|clipboard|user|cursor|input):?([^{}<>\n]*)\}")
+# Variables offered in the editor menu and listed in the guide: (token, i18n key of its description).
+# ``{input:…}`` is listed separately because its label is chosen by the user.
+VARIABLES: tuple[tuple[str, str], ...] = (
+    ("{date}", "var.date"), ("{time}", "var.time"), ("{datetime}", "var.datetime"),
+    ("{weekday}", "var.weekday"), ("{clipboard}", "var.clipboard"), ("{user}", "var.user"),
+    ("{cursor}", "var.cursor"),
+)
+INPUT_EXAMPLE = "{input:…}"
 CURSOR_MARK = "⁣"  # invisible separator: survives HTML -> text, removed before pasting
 
 WEEKDAYS = {

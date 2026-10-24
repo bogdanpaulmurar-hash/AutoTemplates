@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit
 from autotemplates.core.formats import LANGUAGE_NAMES
 from autotemplates.core.grouping import FAVOURITES, RECENT, Group, folder_title, group_results
 from autotemplates.core.library import Template
+from autotemplates.core.shortcuts import PICKER_SHORTCUTS
 from autotemplates.i18n import t
 from autotemplates.ui import theme
 
@@ -201,13 +202,10 @@ class Picker(QWidget):
             bottom.addWidget(b)
         root.addLayout(bottom)
 
-        QShortcut(QKeySequence("Ctrl+E"), self, activated=self._edit)
-        QShortcut(QKeySequence("Ctrl+N"), self, activated=self.new_requested.emit)
-        QShortcut(QKeySequence("Ctrl+D"), self, activated=self._toggle_fav)
-        QShortcut(QKeySequence("Ctrl+C"), self, activated=lambda: self._copy(False))
-        QShortcut(QKeySequence("Ctrl+Shift+C"), self, activated=lambda: self._copy(True))
-        QShortcut(QKeySequence("Ctrl+,"), self, activated=self.settings_requested.emit)
-        QShortcut(QKeySequence("Ctrl+G"), self, activated=self.view_button.toggle)
+        for name, slot in (("edit", self._edit), ("new", self.new_requested.emit), ("favourite", self._toggle_fav),
+                           ("copy", lambda: self._copy(False)), ("copy_plain", lambda: self._copy(True)),
+                           ("settings", self.settings_requested.emit), ("view", self.view_button.toggle)):
+            QShortcut(QKeySequence(PICKER_SHORTCUTS[name]), self, activated=slot)
         for n in range(1, 10):
             QShortcut(QKeySequence(f"Alt+{n}"), self, activated=lambda n=n: self._insert_row(n - 1))
         self.retranslate()
@@ -217,7 +215,7 @@ class Picker(QWidget):
         hk = self.controller.settings.get("hotkey")
         self.search.setPlaceholderText(t("picker.search"))
         self.hint.setText(t("picker.hint", hotkey=hk))
-        self.view_button.setToolTip(t("picker.group_categories") + " (Ctrl+G)")
+        self.view_button.setToolTip(t("picker.group_categories") + f" ({PICKER_SHORTCUTS['view']})")
         self.reload_categories()
 
     def reload_categories(self) -> None:

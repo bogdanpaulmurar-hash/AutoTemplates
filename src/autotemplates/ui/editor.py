@@ -18,6 +18,7 @@ from autotemplates.core import folders, formats, highlight
 from autotemplates.core.folders import ASK, KEEP_BOTH, MERGE, FolderConflict, FolderError, TrashFailed
 from autotemplates.core.library import Template, fold, safe_name, unique_path
 from autotemplates.core.settings import DEFAULTS
+from autotemplates.core.variables import INPUT_EXAMPLE, VARIABLES
 from autotemplates.i18n import t
 from autotemplates.ui import theme
 from autotemplates.ui.codeedit import CodeEdit
@@ -432,9 +433,7 @@ class EditorWindow(QMainWindow):
 
     def _variables_menu(self, parent) -> QMenu:
         menu = QMenu(parent)
-        for token, key in (("{date}", "var.date"), ("{time}", "var.time"), ("{datetime}", "var.datetime"),
-                           ("{weekday}", "var.weekday"), ("{clipboard}", "var.clipboard"), ("{user}", "var.user"),
-                           ("{cursor}", "var.cursor")):
+        for token, key in VARIABLES:
             menu.addAction(f"{token}  —  {t(key)}", lambda tk=token: self._insert_token(tk))
 
         def ask() -> None:
@@ -442,7 +441,7 @@ class EditorWindow(QMainWindow):
             if ok and label.strip():
                 self._insert_token("{input:" + label.strip() + "}")
 
-        menu.addAction("{input:…}  —  " + t("var.input"), ask)
+        menu.addAction(f"{INPUT_EXAMPLE}  —  " + t("var.input"), ask)
         return menu
 
     def _insert_token(self, token: str) -> None:
