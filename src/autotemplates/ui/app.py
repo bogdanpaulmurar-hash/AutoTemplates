@@ -8,7 +8,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from PySide6.QtCore import QFileSystemWatcher, QObject, QPoint, QTimer, QUrl, Signal
+from PySide6.QtCore import QFileSystemWatcher, QObject, QPoint, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QCursor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, QMenu,
                                QSystemTrayIcon)
@@ -87,6 +87,7 @@ class Controller(QObject):
         self._launcher = None
         self._noteit = None
         self._editor = None
+        self._help = None
         self._target = 0
         self._launch_origin: tuple[int, object] = (0, None)
         self._hotkey_ok = False
@@ -323,6 +324,29 @@ class Controller(QObject):
         ed.show_and_raise()
         if ed.maybe_save():
             ed.open_template(rel)
+
+    def show_help(self, section: str | None = None, parent=None) -> None:
+        """Open the user guide on a section (core/guide.py ids); F1 in every window ends up here."""
+        from autotemplates.ui.help_window import HelpWindow
+
+        if self._launcher is not None and self._launcher.isVisible():
+            self._launcher.hide()
+        if self._picker is not None and self._picker.isVisible():
+            self._picker.hide()
+        host = parent or QApplication.activeModalWidget()
+        if host is not None:
+            # A modal dialog (Settings) blocks every other window: give it a guide window of its own.
+            win = HelpWindow(self, host)
+            win.setAttribute(Qt.WA_DeleteOnClose)
+            win.open_section(section)
+            return
+        if self._help is None:
+            self._help = HelpWindow(self)
+        self._help.open_section(section)
+        try:
+            win32.focus_window(int(self._help.winId()))
+        except Exception:
+            pass
 
     def show_settings(self) -> None:
         from autotemplates.ui.settings_dialog import SettingsDialog

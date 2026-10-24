@@ -20,6 +20,7 @@ from autotemplates.core.paths import default_backup_dir
 from autotemplates.i18n import t
 from autotemplates.platform import devpilot
 from autotemplates.platform.hotkey import Hotkey
+from autotemplates.ui import theme as ui_theme
 
 
 class SettingsDialog(QDialog):
@@ -295,6 +296,9 @@ class SettingsDialog(QDialog):
         about.setWordWrap(True)
         about.setTextInteractionFlags(Qt.TextSelectableByMouse)
         about_lay.addWidget(about)
+        help_btn = QPushButton(ui_theme.glyph_icon("help"), t("help.open"))
+        help_btn.clicked.connect(lambda: controller.show_help("settings", parent=self))
+        about_lay.addWidget(help_btn, 0, Qt.AlignLeft)
         lay.addWidget(about_box)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

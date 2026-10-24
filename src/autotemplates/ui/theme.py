@@ -99,7 +99,7 @@ GLYPHS = {
     "folder": "", "settings": "", "search": "", "star": "", "starfill": "",
     "edit": "", "copy": "", "insert": "", "screenshot": "", "variable": "",
     "superscript": "", "subscript": "", "import": "", "refresh": "", "rename": "",
-    "text": "", "doc": "", "spacing": "", "resize": "", "plain": "",
+    "text": "", "doc": "", "spacing": "", "resize": "", "plain": "", "help": "",
 }
 _FALLBACK = {"bold": "B", "italic": "I", "underline": "U", "strike": "S", "superscript": "x²", "subscript": "x₂",
              "color": "A", "highlight": "H", "code": "</>", "variable": "{}", "table": "▦", "image": "▣",
@@ -107,7 +107,7 @@ _FALLBACK = {"bold": "B", "italic": "I", "underline": "U", "strike": "S", "super
              "left": "⯇", "center": "≡", "right": "⯈", "justify": "☰", "undo": "↶", "redo": "↷", "clear": "⌫",
              "save": "💾", "new": "+", "delete": "🗑", "folder": "📁", "settings": "⚙", "search": "🔍", "star": "☆",
              "starfill": "★", "edit": "✎", "copy": "⧉", "insert": "↵", "screenshot": "📷", "import": "⇩",
-             "refresh": "⟳", "rename": "✎", "text": "T", "doc": "📄", "spacing": "↕", "resize": "⤢", "plain": "T"}
+             "refresh": "⟳", "rename": "✎", "text": "T", "doc": "📄", "spacing": "↕", "resize": "⤢", "plain": "T", "help": "?"}
 
 
 # Drawn as text everywhere: letters read better than glyphs for formatting buttons.

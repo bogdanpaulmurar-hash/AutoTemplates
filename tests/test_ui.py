@@ -548,3 +548,29 @@ def test_backup_tab_restore_dialog_and_controller_restore(qapp, home, tmp_path):
     assert c.library.usage.favourite(rel)
     assert note.title_edit.text() == "Backup draft"
     assert "theme" in result.settings_changed
+
+
+def test_help_window_sections_search_and_settings(qapp, home):
+    from autotemplates import i18n
+    from autotemplates.core import guide
+
+    c = _controller(qapp, home)
+    c.show_help("noteit")
+    win = c._help
+    assert win.isVisible() and win.list.count() == len(guide.SECTION_IDS)
+    assert win.list.currentItem().data(257) == "noteit"  # Qt.UserRole + 1
+    win.search.setText("restaureaza")  # no diacritics
+    ids = [win.list.item(i).data(257) for i in range(win.list.count())]
+    assert "backup" in ids and "picker" not in ids
+    assert win.browser.extraSelections()  # the word is marked in the text
+    win.search.setText("zzzz-nothing")
+    assert win.list.count() == 0 and not win.none.isHidden()
+    c.show_help("start")  # a section request clears the search
+    assert win.search.text() == "" and c.settings.get("hotkey") in win.browser.toPlainText()
+    i18n.set_language("en")
+    try:
+        c.show_help()
+        assert win.windowTitle().endswith("User guide") and win.list.item(0).text() == "Quick start"
+    finally:
+        i18n.set_language("ro")
+    win.close()
