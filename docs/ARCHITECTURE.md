@@ -19,6 +19,8 @@ src/autotemplates/
     highlight.py       language detection + inline-styled Pygments HTML
     noteit_export.py   NoteIT: Outlook HTML with cid: pictures, OneNote page XML, OneNote hierarchy parsing
     backup.py          backup zip (manifest + settings, usage, NoteIT drafts, optional library), rotation, restore
+    shortcuts.py       every window's keyboard shortcuts (bound by the UI, listed by the guide)
+    guide.py           in-app user guide: RO/EN sections as HTML, key tables and current settings generated
   platform/
     hotkey.py          RegisterHotKey on its own thread; "Ctrl+Q" parsing
     win32.py           foreground window, caret position, focused control, focus, SendInput (Ctrl+V, ←)
@@ -38,6 +40,7 @@ src/autotemplates/
     richedit.py        QTextEdit commands, pasted pictures, saving pictures to <name>.assets
     codeedit.py        QPlainTextEdit + Pygments highlighter
     settings_dialog.py
+    help_window.py     user guide window (sections, search with diacritics optional), opened with F1
     theme.py           dark/light QSS, icon-font glyphs, app icon drawn in code
 ```
 
@@ -99,6 +102,18 @@ for other apps. Both carry the original bytes: pictures are never recompressed o
   Templates never overwrite: identical ones are skipped, different ones become `Name (2)` with their `.assets`
   renamed and the `<img src>` rewritten. NoteIT picture links are rewritten to this computer's cache.
   Backups from a newer format and zips with unsafe paths are refused.
+
+## User guide (`core/guide.py`, `ui/help_window.py`)
+
+- Eight sections (quick start, picker, editor, NoteIT, variables, settings, backup, common problems), RO and EN.
+  The prose is written by hand; the key tables come from `core/shortcuts.py`, the variable table from
+  `core/variables.VARIABLES`, and the hotkeys, Enter mode, Recent count, date/time format and backup settings
+  from the current settings, so the guide never shows a stale key.
+- Rebuilt every time the window opens (language, settings). F1 opens it on the window's own section: picker,
+  editor, NoteIT, Settings; the launcher opens the quick start. Also tray → User guide, Settings → About,
+  `action help` (DevPilot).
+- Opened from the modal Settings dialog it is a child window of that dialog (otherwise it could not be used);
+  opened from a stay-on-top NoteIT it stays on top too.
 
 ## Performance
 

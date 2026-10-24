@@ -191,9 +191,9 @@ def _editor(tr: Tr, c: Mapping[str, Any], li: int) -> str:
            "cu culori.",
            "<b>Coloured code</b>: “Coloured code block” detects the language. Code and text files are edited "
            "with colours."),
-        tr("<b>Word, RTF, poze</b> se inserează cum sunt; „Copie editabilă” le transformă în template de editor.",
-           "<b>Word, RTF, pictures</b> are inserted as they are; “Editable copy” turns them into an editor "
-           "template."),
+        tr("<b>Word, RTF, poze</b> se inserează cum sunt; butonul „Convertește” le transformă în template de editor.",
+           "<b>Word, RTF, pictures</b> are inserted as they are; the “Convert” button turns them into an "
+           "editor template."),
         tr("<b>Arbore</b>: tragi template-uri și foldere pe alt folder. Click dreapta pe folder: Redenumește, "
            "Mută în…, Șterge. Nimic nu se suprascrie („Nume (2)”), ștergerea merge în Coș, favoritele și "
            "statisticile se mută odată cu template-urile.",
@@ -314,7 +314,7 @@ def _backup(tr: Tr, c: Mapping[str, Any], li: int) -> str:
         tr("<b>Ce intră</b>: setările, statisticile și favoritele, ciornele NoteIT cu pozele lor. Template-urile "
            "doar cu bifa „Include și template-urile” (biblioteca stă deja în folderul ei, poate sincronizat).",
            "<b>What is saved</b>: settings, statistics and favourites, NoteIT drafts with their pictures. "
-           "Templates only with “Include the templates” ticked (the library already has its own, possibly "
+           "Templates only with “Also include the templates” ticked (the library already has its own, possibly "
            "synced, folder)."),
         tr("<b>Când</b>: automat zilnic, la fiecare pornire sau oprit; manual cu „Backup acum” din Setări → "
            "Backup, din tray sau din DevPilot. Cele mai vechi copii se șterg peste numărul ales.",

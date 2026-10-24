@@ -15,6 +15,7 @@ tables and coloured code included. Runs on its own (tray icon) or inside **DevPi
 3. Template-urile se fac în editor (dublu-clic pe iconiță) sau se pun ca fișiere în `Documente\AutoTemplates`.
 4. Tasta, folderul, limba (RO/EN), aspectul și fonturile se schimbă din **Setări**.
 5. **NoteIT** (Ctrl+Alt+N sau din meniul de la Ctrl+Q): notă rapidă cu formatare și capturi. Copiere, salvare ca template, mail în Outlook sau pagină în OneNote. Ciorna se păstrează dacă închizi fereastra.
+6. **Ghid de utilizare**: F1 în orice fereastră (sau din tray) arată tastele și pașii pe scurt.
 
 ## Install
 
@@ -59,6 +60,12 @@ The list is **grouped** by default: ★ Favourites and Recent (the last 5 used) 
 folder. Folded groups are remembered; while you type, only the groups with results are shown, all open, the best
 match first. Settings → Insert: view (groups / list), number of recent templates (0 = none), whether favourites also
 stay in their folder.
+
+### User guide
+
+**F1** in any AutoTemplates window (picker, editor, NoteIT, Settings) opens a short guide in Romanian or English
+on the matching section; also from the tray menu, Settings › About and DevPilot. It lists the keys and your
+current hotkeys straight from the app, so it is always up to date.
 
 ### Variables
 
