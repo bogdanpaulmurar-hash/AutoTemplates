@@ -18,6 +18,7 @@ from autotemplates.core import folders, formats, highlight
 from autotemplates.core.folders import ASK, KEEP_BOTH, MERGE, FolderConflict, FolderError, TrashFailed
 from autotemplates.core.library import Template, fold, safe_name, unique_path
 from autotemplates.core.settings import DEFAULTS
+from autotemplates.core.shortcuts import EDITOR_SHORTCUTS
 from autotemplates.core.variables import INPUT_EXAMPLE, VARIABLES
 from autotemplates.i18n import t
 from autotemplates.ui import theme
@@ -114,6 +115,15 @@ class EditorWindow(QMainWindow):
         self.new_btn.setPopupMode(QToolButton.InstantPopup)
         self.new_btn.setMenu(self._new_menu())
         top.addWidget(self.new_btn)
+        self.a_help = QAction(theme.glyph_icon("help"), t("tray.help"), self)
+        self.a_help.setShortcut(QKeySequence(EDITOR_SHORTCUTS["help"]))
+        self.a_help.setShortcutContext(Qt.WindowShortcut)
+        self.a_help.setToolTip(f"{t('tray.help')} ({EDITOR_SHORTCUTS['help']})")
+        self.a_help.triggered.connect(lambda: self.c.show_help("editor"))
+        self.addAction(self.a_help)
+        help_btn = QToolButton()
+        help_btn.setDefaultAction(self.a_help)
+        top.addWidget(help_btn)
         ll.addLayout(top)
         self.tree = LibraryTree()
         self.tree.setHeaderHidden(True)
@@ -255,10 +265,9 @@ class EditorWindow(QMainWindow):
         split.setSizes([300, 880])
         self.setCentralWidget(split)
 
-        save = QAction(self, shortcut=QKeySequence.Save, triggered=self.save)
-        self.addAction(save)
-        self.addAction(QAction(self, shortcut=QKeySequence("Ctrl+N"), triggered=lambda: self.new_template("rich")))
-        self.addAction(QAction(self, shortcut=QKeySequence("Ctrl+F"), triggered=lambda: self.filter.setFocus()))
+        for name, slot in (("save", self.save), ("new", lambda: self.new_template("rich")),
+                           ("filter", lambda: self.filter.setFocus())):
+            self.addAction(QAction(self, shortcut=QKeySequence(EDITOR_SHORTCUTS[name]), triggered=slot))
         QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
         self.apply_settings()
         self.reload_tree()
@@ -377,7 +386,7 @@ class EditorWindow(QMainWindow):
         self._act(bar2, "screenshot", "fmt.screenshot", self._take_screenshot)
         a_resize = self._act(bar2, "resize", "fmt.resize", self._resize_image)
         a_resize.setToolTip(t("fmt.resize_tip"))
-        self._act(bar2, "code", "fmt.code", self._insert_code, shortcut="Ctrl+Shift+K")
+        self._act(bar2, "code", "fmt.code", self._insert_code, shortcut=EDITOR_SHORTCUTS["code"])
         var = QToolButton()
         var.setIcon(theme.glyph_icon("variable"))
         var.setToolTip(t("fmt.variable"))

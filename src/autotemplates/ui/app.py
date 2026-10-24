@@ -248,6 +248,7 @@ class Controller(QObject):
             p.noteit_requested.connect(self.show_noteit)
             p.editor_requested.connect(self.show_editor)
             p.settings_requested.connect(self.show_settings)
+            p.help_requested.connect(lambda: self.show_help("picker"))
             p.favourite_toggled.connect(lambda rel: self.library.usage.set_favourite(rel, not self.library.usage.favourite(rel)))
             self._picker = p
         return self._picker
@@ -342,6 +343,11 @@ class Controller(QObject):
             return
         if self._help is None:
             self._help = HelpWindow(self)
+        # NoteIT may stay on top: the guide opened from it must not end up hidden behind it.
+        on_top = self._noteit is not None and self._noteit.isVisible() and \
+            bool(self._noteit.windowFlags() & Qt.WindowStaysOnTopHint)
+        if bool(self._help.windowFlags() & Qt.WindowStaysOnTopHint) != on_top:
+            self._help.setWindowFlag(Qt.WindowStaysOnTopHint, on_top)
         self._help.open_section(section)
         try:
             win32.focus_window(int(self._help.winId()))
@@ -543,7 +549,7 @@ class Controller(QObject):
                                     ("tray.new_clipboard", "copy", "new_clipboard"), ("tray.editor", "edit", "editor"),
                                     (None, None, None), ("tray.folder", "folder", "folder"),
                                     ("tray.reload", "refresh", "reload"), ("tray.backup", "save", "backup"),
-                                    ("tray.settings", "settings", "settings"),
+                                    ("tray.settings", "settings", "settings"), ("tray.help", "help", "help"),
                                     (None, None, None), ("tray.quit", "delete", "quit")):
             if label is None:
                 menu.addSeparator()
@@ -595,6 +601,8 @@ class Controller(QObject):
             self.rescan()
         elif action == "backup":
             self.backup_now()
+        elif action == "help":
+            self.show_help(message.get("section"))
         elif action == "quit":
             if self._editor is None or self._editor.maybe_save():
                 self.qt_app.quit()

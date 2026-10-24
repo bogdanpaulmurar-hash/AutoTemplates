@@ -183,6 +183,10 @@ class QuickLauncher(QWidget):
         if key == Qt.Key_N:
             self._select_noteit()
             return
+        if key == Qt.Key_F1:
+            self.hide()
+            self.controller.show_help("start")
+            return
         if key == Qt.Key_T:
             self._select_templates()
             return

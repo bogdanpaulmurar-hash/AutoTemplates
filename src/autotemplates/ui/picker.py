@@ -126,6 +126,7 @@ class Picker(QWidget):
     noteit_requested = Signal()
     settings_requested = Signal()
     editor_requested = Signal()
+    help_requested = Signal()
     favourite_toggled = Signal(str)
 
     def __init__(self, controller) -> None:
@@ -204,7 +205,8 @@ class Picker(QWidget):
 
         for name, slot in (("edit", self._edit), ("new", self.new_requested.emit), ("favourite", self._toggle_fav),
                            ("copy", lambda: self._copy(False)), ("copy_plain", lambda: self._copy(True)),
-                           ("settings", self.settings_requested.emit), ("view", self.view_button.toggle)):
+                           ("settings", self.settings_requested.emit), ("view", self.view_button.toggle),
+                           ("help", self.help_requested.emit)):
             QShortcut(QKeySequence(PICKER_SHORTCUTS[name]), self, activated=slot)
         for n in range(1, 10):
             QShortcut(QKeySequence(f"Alt+{n}"), self, activated=lambda n=n: self._insert_row(n - 1))

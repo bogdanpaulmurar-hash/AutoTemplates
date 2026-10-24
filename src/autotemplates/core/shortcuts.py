@@ -51,6 +51,7 @@ EDITOR_SHORTCUTS: dict[str, str] = {
     "save": "Ctrl+S",
     "new": "Ctrl+N",
     "filter": "Ctrl+F",
+    "code": "Ctrl+Shift+K",
     "help": HELP_KEY,
 }
 

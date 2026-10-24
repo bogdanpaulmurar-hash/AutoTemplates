@@ -50,6 +50,7 @@ EDITOR_LABELS: dict[str, tuple[str, str]] = {
     "save": ("Salvează template-ul", "Save the template"),
     "new": ("Template formatat nou", "New formatted template"),
     "filter": ("Caută în arbore", "Search the tree"),
+    "code": ("Bloc de cod colorat", "Coloured code block"),
     "help": ("Ghidul de utilizare", "User guide"),
 }
 NOTEIT_LABELS: dict[str, tuple[str, str]] = {

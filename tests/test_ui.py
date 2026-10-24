@@ -574,3 +574,14 @@ def test_help_window_sections_search_and_settings(qapp, home):
     finally:
         i18n.set_language("ro")
     win.close()
+
+
+def test_f1_opens_the_guide_on_the_right_section(qapp, home, monkeypatch):
+    c = _controller(qapp, home)
+    opened = []
+    monkeypatch.setattr(c, "show_help", lambda section=None, parent=None: opened.append(section))
+    c.picker.help_requested.emit()
+    assert c.editor.a_help.shortcut().toString() == "F1"
+    c.editor.a_help.trigger()
+    c.run_action({"action": "help", "section": "backup"})
+    assert opened == ["picker", "editor", "backup"]

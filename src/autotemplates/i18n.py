@@ -66,8 +66,8 @@ TEXTS: dict[str, tuple[str, str]] = {
     "tray.noteit": ("Notă nouă (NoteIT)", "New note (NoteIT)"),
     # picker
     "picker.search": ("Caută template… (nume, categorie, etichetă, text)", "Search templates… (name, category, tag, text)"),
-    "picker.hint": ("Enter inserează · Shift+Enter text simplu · Alt+1…9 · Ctrl+D favorit · Ctrl+G grupuri · Esc",
-                    "Enter inserts · Shift+Enter plain · Alt+1…9 · Ctrl+D favourite · Ctrl+G groups · Esc"),
+    "picker.hint": ("Enter inserează · Shift+Enter text simplu · Alt+1…9 · Ctrl+D favorit · Ctrl+G grupuri · F1 ghid · Esc",
+                    "Enter inserts · Shift+Enter plain · Alt+1…9 · Ctrl+D favourite · Ctrl+G groups · F1 guide · Esc"),
     "picker.empty_library": ("Biblioteca este goală. Adaugă fișiere în:\n{folder}",
                              "Library is empty. Add files to:\n{folder}"),
     "picker.no_match": ("Niciun rezultat găsit.", "No match."),

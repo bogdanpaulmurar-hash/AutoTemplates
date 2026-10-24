@@ -2,7 +2,7 @@
 
     python -m autotemplates [gui] [--autostart]     start (or show the running app)
     python -m autotemplates action <id> [--no-start] picker | new | new_clipboard | editor |
-                                                     settings | folder | reload | quit
+                                                     settings | folder | reload | backup | help | quit
     python -m autotemplates setup [--start-menu] [--autostart on|off] [--remove]
     python -m autotemplates version
     python -m autotemplates --self-test

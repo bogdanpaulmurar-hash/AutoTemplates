@@ -15,12 +15,13 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication
+from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton,
                                QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 
 from autotemplates.core import formats
+from autotemplates.core.shortcuts import NOTEIT_SHORTCUTS
 from autotemplates.i18n import t
 from autotemplates.ui import theme
 from autotemplates.ui.richedit import RichEdit, localize_images, with_shortcut
@@ -72,6 +73,7 @@ class NoteITWindow(QWidget):
 
         self._setup_ui()
         self._load_draft()
+        QShortcut(QKeySequence(NOTEIT_SHORTCUTS["help"]), self, activated=lambda: self.controller.show_help("noteit"))
 
         self._autosave = QTimer(self)
         self._autosave.setInterval(AUTOSAVE_MS)

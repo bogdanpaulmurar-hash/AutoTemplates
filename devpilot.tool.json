@@ -76,6 +76,13 @@
       "kind": "Arguments",
       "arguments": "action settings",
       "section": "Files"
+    },
+    {
+      "label": "User guide",
+      "glyph": "E897",
+      "kind": "Arguments",
+      "arguments": "action help",
+      "section": "Files"
     }
   ]
 }

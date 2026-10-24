@@ -5,7 +5,7 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 ## Commands
 - Dev install: `pip install -e .[dev]`
 - Tests: `pytest` (on Linux: `QT_QPA_PLATFORM=offscreen pytest`)
-- Run: `python -m autotemplates gui`; actions: `python -m autotemplates action picker|new|editor|settings|folder|reload|quit`; `--self-test`; `version`
+- Run: `python -m autotemplates gui`; actions: `python -m autotemplates action picker|new|editor|settings|folder|reload|backup|help|quit`; `--self-test`; `version`
 - User install: `Install.bat` → private venv in `%LOCALAPPDATA%\AutoTemplates\venv`, started with `pythonw`
 - Design: `docs/ARCHITECTURE.md` — read it before structural changes
 

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QColor, QDesktopServices, QFont, QKeySequence
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialog,
                                QDialogButtonBox, QFileDialog, QFontComboBox,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialog,
 from autotemplates import __version__
 from autotemplates.core import highlight
 from autotemplates.core.paths import default_backup_dir
+from autotemplates.core.shortcuts import HELP_KEY
 from autotemplates.i18n import t
 from autotemplates.platform import devpilot
 from autotemplates.platform.hotkey import Hotkey
@@ -300,6 +301,7 @@ class SettingsDialog(QDialog):
         help_btn.clicked.connect(lambda: controller.show_help("settings", parent=self))
         about_lay.addWidget(help_btn, 0, Qt.AlignLeft)
         lay.addWidget(about_box)
+        QShortcut(QKeySequence(HELP_KEY), self, activated=lambda: controller.show_help("settings", parent=self))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._accept)
