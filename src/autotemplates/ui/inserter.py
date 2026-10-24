@@ -2,7 +2,13 @@
 
 Pasting is the only method that keeps formatting and pictures in every program
 (Word, Outlook, Teams, browsers, code editors). The text goes to the clipboard
-as HTML *and* plain text, so each program takes the richest format it supports.
+as HTML *and* plain text (plus the original RTF for .rtf templates), so each
+program takes the richest format it supports.
+
+The HTML is rebuilt by ``core.clipboard_html`` so the fragment carries all of its
+styles inline, and pictures travel the way the target app can load them. In
+Outlook/Word the paste goes through COM with "Keep source formatting" when the
+setting is on (Ctrl+V would follow the user's "Keep text only" option).
 """
 
 from __future__ import annotations
@@ -13,14 +19,16 @@ import time
 from PySide6.QtCore import QMimeData, QObject, QTimer, QUrl
 from PySide6.QtGui import QGuiApplication, QImage
 
+from autotemplates.core import clipboard_html as ch
 from autotemplates.core import variables as tv
 from autotemplates.core.settings import Settings
-from autotemplates.platform import win32
+from autotemplates.platform import office, win32
 from autotemplates.ui.content import Rendered
 
 log = logging.getLogger(__name__)
 
 MAX_BACKUP_BYTES = 64 * 1024 * 1024
+RTF_MIME = 'application/x-qt-windows-mime;value="Rich Text Format"'  # CF "Rich Text Format" on Windows
 
 
 def backup_clipboard() -> QMimeData | None:
@@ -70,14 +78,14 @@ def wrap_cf_html(html: str) -> str:
     )
 
 
-def build_mime(html: str, text: str, image_path=None, *, plain: bool = False) -> QMimeData:
+def build_mime(html: str, text: str, image_path=None, *, plain: bool = False, rtf: bytes = b"") -> QMimeData:
     mime = QMimeData()
     mime.setText(text)
     if not plain:
+        if rtf:
+            mime.setData(RTF_MIME, rtf)
         if html:
-            wrapped = wrap_cf_html(html)
-            mime.setHtml(wrapped)
-            mime.setData("text/html", wrapped.encode("utf-8"))
+            mime.setHtml(wrap_cf_html(html))
         if image_path is not None:
             image = QImage(str(image_path))
             if not image.isNull():
@@ -111,20 +119,46 @@ class Inserter(QObject):
         html = html.replace(tv.CURSOR_MARK, "")
         return html, text, back
 
+    def clipboard_html(self, html: str, process: str = "") -> str:
+        """The HTML exactly as it goes on the clipboard for a target ``process`` ("" = unknown)."""
+        if not html:
+            return ""
+        s = self.settings
+        out = ch.fragment_html(html, base_font=str(s.get("editor_font_family") or ""),
+                               base_size_pt=float(s.get("editor_font_size") or 0),
+                               keep_body_font=s.get("insert_base_font") != "target")
+        return ch.set_image_sources(out, ch.image_mode_for(process, str(s.get("insert_images") or "auto")))
+
+    def mime_for(self, rendered: Rendered, html: str, text: str, *, plain: bool, process: str = "") -> QMimeData:
+        # The original RTF only when nothing had to be filled in (variables live in the HTML/text copies).
+        rtf = rendered.rtf if rendered.rtf and not tv.has_variables(rendered.text) else b""
+        return build_mime("" if plain else self.clipboard_html(html, process), text, rendered.image,
+                          plain=plain, rtf=rtf)
+
+    def _paste(self, target_hwnd: int, process: str, plain: bool) -> None:
+        if not plain and self.settings.get("office_com_paste") and process in office.COM_PASTE_PROCESSES:
+            try:
+                office.paste_original(process, win32.window_title(target_hwnd), win32.focused_class(target_hwnd))
+                return
+            except office.OfficeUnavailable as e:
+                log.info("COM paste not used (%s); falling back to Ctrl+V", e)
+        win32.send_paste()
+
     def insert(self, rendered: Rendered, target_hwnd: int, *, plain: bool, answers: dict[str, str] | None = None) -> None:
         html, text, back = self.prepare(rendered, plain=plain, answers=answers)
         if self._restore_timer.isActive():  # a previous insertion has not restored yet: keep the original
             self._restore_timer.stop()
         elif self.settings.get("restore_clipboard"):
             self._restore = backup_clipboard()
-        QGuiApplication.clipboard().setMimeData(build_mime(html, text, rendered.image, plain=plain))
+        process = win32.process_name(target_hwnd) if target_hwnd else ""
+        QGuiApplication.clipboard().setMimeData(self.mime_for(rendered, html, text, plain=plain, process=process))
         QGuiApplication.processEvents()
 
         win32.release_modifiers()
         if target_hwnd:
             win32.focus_window(target_hwnd)
         time.sleep(max(0.08, int(self.settings.get("paste_delay_ms")) / 1000))
-        win32.send_paste()
+        self._paste(target_hwnd, process, plain)
         if back:
             time.sleep(0.03)
             win32.send_left(back)
@@ -136,7 +170,7 @@ class Inserter(QObject):
         html, text, _ = self.prepare(rendered, plain=plain, answers=answers)
         self._restore_timer.stop()
         self._restore = None
-        QGuiApplication.clipboard().setMimeData(build_mime(html, text, rendered.image, plain=plain))
+        QGuiApplication.clipboard().setMimeData(self.mime_for(rendered, html, text, plain=plain))
 
     def _restore_clipboard(self) -> None:
         if self._restore is not None:

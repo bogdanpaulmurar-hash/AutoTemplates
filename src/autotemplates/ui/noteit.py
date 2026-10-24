@@ -14,7 +14,7 @@ import logging
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton,
@@ -396,14 +396,10 @@ class NoteITWindow(QWidget):
         return self.title_edit.text().strip() or t(fallback_key)
 
     def _copy_and_close(self) -> None:
-        from autotemplates.ui.inserter import wrap_cf_html
+        from autotemplates.ui.inserter import build_mime
 
-        mime = QMimeData()
-        mime.setText(self.editor.toPlainText())
-        wrapped = wrap_cf_html(self.editor.toHtml())
-        mime.setHtml(wrapped)
-        mime.setData("text/html", wrapped.encode("utf-8"))
-        QGuiApplication.clipboard().setMimeData(mime)
+        html = self.controller.inserter.clipboard_html(self.editor.toHtml())
+        QGuiApplication.clipboard().setMimeData(build_mime(html, self.editor.toPlainText()))
         self._finish()
         self.controller.notify(t("noteit.copied"))
 

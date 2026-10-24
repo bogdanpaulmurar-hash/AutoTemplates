@@ -68,10 +68,10 @@ def test_rtf_to_text():
 def test_docx(tmp_path):
     path = make_docx(tmp_path / "a.docx")
     res = formats.docx_to_html(path, tmp_path / "media")
-    assert "<h1>Title</h1>" in res.html
+    assert "Title</h1>" in res.html
     assert "<b>Bold red</b>" in res.html and "color:#FF0000" in res.html
-    assert "<ul><li>Item one</li></ul>" in res.html
-    assert "<td>" in res.html and "A1" in res.text and "Bold red normal" in res.text
+    assert "Item one</li></ul>" in res.html
+    assert "<td" in res.html and "A1" in res.text and "Bold red normal" in res.text
 
 
 def test_detect_language():

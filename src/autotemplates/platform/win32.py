@@ -116,6 +116,17 @@ def caret_position(hwnd: int) -> tuple[int, int, int] | None:
     return pt.x, pt.y, max(1, rc.bottom - rc.top)
 
 
+def focused_class(hwnd: int) -> str:
+    """Window class of the control that has the keyboard focus in ``hwnd``'s thread."""
+    if not IS_WINDOWS or not hwnd:
+        return ""
+    info = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
+    thread = user32.GetWindowThreadProcessId(hwnd, None)
+    if not user32.GetGUIThreadInfo(thread, ctypes.byref(info)) or not info.hwndFocus:
+        return ""
+    return class_name(int(info.hwndFocus))
+
+
 def _key(vk: int, up: bool = False) -> "INPUT":
     inp = INPUT(type=1)
     inp.u.ki = KEYBDINPUT(wVk=vk, wScan=0, dwFlags=KEYEVENTF_KEYUP if up else 0, time=0, dwExtraInfo=0)

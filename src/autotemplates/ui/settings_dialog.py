@@ -110,6 +110,23 @@ class SettingsDialog(QDialog):
         inf.addRow(t("settings.mode"), self.insert_mode)
         inf.addRow("", QLabel(t("settings.enter_inserts")))
 
+        self.base_font = QComboBox()
+        self.base_font.addItem(t("settings.base_font_editor"), "editor")
+        self.base_font.addItem(t("settings.base_font_target"), "target")
+        self.base_font.setCurrentIndex(max(0, self.base_font.findData(s.get("insert_base_font"))))
+        inf.addRow(t("settings.base_font"), self.base_font)
+
+        self.images = QComboBox()
+        for key in ("auto", "file", "data"):
+            self.images.addItem(t(f"settings.images_{key}"), key)
+        self.images.setCurrentIndex(max(0, self.images.findData(s.get("insert_images"))))
+        self.images.setToolTip(t("settings.images_tip"))
+        inf.addRow(t("settings.images"), self.images)
+
+        self.office_com = QCheckBox(t("settings.office_com"))
+        self.office_com.setChecked(bool(s.get("office_com_paste")))
+        inf.addRow("", self.office_com)
+
         self.restore_clip = QCheckBox(t("settings.restore_clipboard"))
         self.restore_clip.setChecked(bool(s.get("restore_clipboard")))
         inf.addRow("", self.restore_clip)
@@ -264,6 +281,9 @@ class SettingsDialog(QDialog):
             "theme": self.theme.currentData(),
             "start_with_windows": self.autostart.isChecked(),
             "insert_mode": self.insert_mode.currentData(),
+            "insert_base_font": self.base_font.currentData(),
+            "insert_images": self.images.currentData(),
+            "office_com_paste": self.office_com.isChecked(),
             "restore_clipboard": self.restore_clip.isChecked(),
             "paste_delay_ms": self.paste_delay.value(),
             "restore_delay_ms": self.restore_delay.value(),

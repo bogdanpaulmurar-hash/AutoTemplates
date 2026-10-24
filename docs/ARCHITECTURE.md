@@ -11,16 +11,19 @@ src/autotemplates/
     settings.py        JSON settings with defaults and change listeners
     library.py         folder scan, cached index, search/ranking, usage + favourites (+ retention of deleted)
     folders.py         editor tree ops: move/rename/merge/delete folders and templates, index + usage kept in step
-    formats.py         file kinds, docx → HTML, rtf → text, HTML → text, <meta> metadata
+    formats.py         file kinds, rtf → HTML/text, HTML → text, <meta> metadata
+    docx_html.py       docx → HTML with styles.xml, theme fonts, numbering.xml, spacing, sized pictures
+    clipboard_html.py  CF_HTML fragment with every style inline; pictures as file:/// or data: (original bytes)
     variables.py       {date} {time} {clipboard} {input:…} {cursor} …
     highlight.py       language detection + inline-styled Pygments HTML
     noteit_export.py   NoteIT: Outlook HTML with cid: pictures, OneNote page XML, OneNote hierarchy parsing
   platform/
     hotkey.py          RegisterHotKey on its own thread; "Ctrl+Q" parsing
-    win32.py           foreground window, caret position, focus, SendInput (Ctrl+V, ←)
+    win32.py           foreground window, caret position, focused control, focus, SendInput (Ctrl+V, ←)
     autostart.py       HKCU Run entry, Start-menu shortcut, AppUserModelID
     devpilot.py        DEVPILOT_MANAGED / DEVPILOT_SUPPRESS
-    office.py          Outlook / OneNote desktop through COM (pywin32); raises OfficeUnavailable → UI fallback
+    office.py          Outlook / OneNote desktop through COM (pywin32); Word/Outlook paste with source formatting;
+                       raises OfficeUnavailable → UI fallback
   ui/
     app.py             Controller: tray, hotkey → picker → insert, watcher, actions
     picker.py          the Ctrl+Q list (built once, then shown/hidden)
@@ -44,12 +47,25 @@ src/autotemplates/
 3. Enter: the template is rendered (cached by path + mtime), `{input:…}` values are asked in one small form, the other
    variables are expanded.
 4. The current clipboard is copied (all formats, up to 64 MB), the template is put on the clipboard as HTML **and**
-   plain text (plus the bitmap for picture templates), the target window gets the focus back, held modifiers are
-   released (so Shift+Enter does not become Ctrl+Shift+V), and Ctrl+V is sent with `SendInput`.
+   plain text (plus the bitmap for picture templates and the original RTF for `.rtf` templates without variables),
+   the target window gets the focus back, held modifiers are released (so Shift+Enter does not become
+   Ctrl+Shift+V), and Ctrl+V is sent with `SendInput`. In Word/Outlook, with `office_com_paste` on and the caret in
+   the document body (`_WwG`), the paste is `Selection.PasteAndFormat(wdFormatOriginalFormatting)` instead, because
+   Ctrl+V follows the user's "Pasting from other programs" option (possibly "Keep text only").
 5. `{cursor}` sends ← as many times as there are characters after the marker.
 6. After `restore_delay_ms` the old clipboard is put back.
 
-Pictures in HTML are absolute `file:///` URLs at insertion time: Word, Outlook and Teams load them while pasting.
+### Formatting on the clipboard (`core/clipboard_html.py`)
+
+Targets read only the CF_HTML fragment; browsers and Teams also ignore `<head><style>`. Qt keeps the base font
+on `<body style>` and paragraph rules in `<head>`, so before pasting the HTML is rebuilt: head rules with plain tag
+selectors and the body style are moved inline, `-qt-*` CSS is dropped, `monospace` becomes Consolas, and the
+fragment is wrapped in a `<div>` with the base font. Text without a font of its own gets the editor font
+(`insert_base_font = editor`) so Word/Outlook do not fall back to Times New Roman; `target` leaves it to the app.
+
+Pictures (`insert_images`): `auto` keeps `file:///` for Office (it embeds the original file) and uses `data:` URIs
+for other apps. Both carry the original bytes: pictures are never recompressed or scaled (a picture over 5 MB stays
+`file:///` rather than being shrunk). Displayed size comes from the template's `width`/`height`.
 
 ## NoteIT
 

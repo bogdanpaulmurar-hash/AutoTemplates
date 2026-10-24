@@ -76,6 +76,62 @@ def open_outlook_mail(subject: str, markup: str, base: Path | None = None) -> No
         raise OfficeUnavailable(f"Outlook: {e}") from e
 
 
+# ------------------------------------------------------------------ paste keeping the source formatting
+WD_FORMAT_ORIGINAL = 16  # wdFormatOriginalFormatting
+COM_PASTE_PROCESSES = {"winword.exe", "outlook.exe"}
+WORD_EDITOR_CLASS = "_WwG"  # the Word document window, also used by Outlook's mail editor
+
+
+def _active(prog_id: str):
+    client = _client()
+    try:
+        return client.GetActiveObject(prog_id)
+    except Exception as e:  # noqa: BLE001 - not running, other user, broken registration
+        raise OfficeUnavailable(f"{prog_id}: {e}") from e
+
+
+def _same_window(caption: str, title: str) -> bool:
+    caption, title = (caption or "").strip().lower(), (title or "").strip().lower()
+    return not title or (bool(caption) and caption in title)
+
+
+def _selection(process: str, title: str):
+    """The Word selection of the editor in the window the user was typing in."""
+    if process == "winword.exe":
+        word = _active("Word.Application")
+        if not _same_window(word.ActiveWindow.Caption, title):
+            raise OfficeUnavailable("Word: another window is active")
+        return word.ActiveWindow.Selection
+    outlook = _active("Outlook.Application")
+    inspector = outlook.ActiveInspector()
+    if inspector is not None and inspector.EditorType == 4 and _same_window(inspector.Caption, title):  # olEditorWord
+        return inspector.WordEditor.Windows(1).Selection
+    explorer = outlook.ActiveExplorer()
+    if explorer is not None and _same_window(explorer.Caption, title):
+        editor = explorer.ActiveInlineResponseWordEditor
+        if editor is not None:
+            return editor.Application.Selection
+    raise OfficeUnavailable("Outlook: no mail editor in this window")
+
+
+def paste_original(process: str, title: str, focus_class: str) -> None:
+    """Pastes the clipboard into Word/Outlook with "Keep source formatting".
+
+    Ctrl+V follows the user's "Pasting from other programs" option, which may be
+    "Keep text only". Only used when the caret is in the document body (``_WwG``),
+    never in To/Subject. Raises ``OfficeUnavailable`` so the caller falls back to Ctrl+V.
+    """
+    if process not in COM_PASTE_PROCESSES:
+        raise OfficeUnavailable(f"{process}: no COM paste")
+    if focus_class != WORD_EDITOR_CLASS:
+        raise OfficeUnavailable(f"focus is in {focus_class or 'an unknown control'}, not in the document body")
+    selection = _selection(process, title)
+    try:
+        selection.PasteAndFormat(WD_FORMAT_ORIGINAL)
+    except Exception as e:  # noqa: BLE001 - read-only mail, protected document...
+        raise OfficeUnavailable(f"PasteAndFormat: {e}") from e
+
+
 # ------------------------------------------------------------------ OneNote
 def onenote_sections() -> list[OneNoteSection]:
     app = _dispatch("OneNote.Application")

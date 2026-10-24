@@ -25,6 +25,9 @@ DEFAULTS: dict[str, Any] = {
     "theme": "dark",  # dark | light
     "start_with_windows": True,
     "insert_mode": "rich",  # rich | plain (Enter); Shift+Enter is the other one
+    "insert_base_font": "editor",  # text without a font of its own: editor (editor font) | target (target app's font)
+    "insert_images": "auto",  # auto (file:/// for Office, data: elsewhere) | file | data
+    "office_com_paste": True,  # Outlook/Word: paste through COM keeping the source formatting
     "restore_clipboard": True,
     "paste_delay_ms": 60,  # time for the target window to take the focus back
     "restore_delay_ms": 800,  # time for the target to read the clipboard before it is restored
@@ -45,6 +48,15 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
+def _same_type(value: Any, default: Any) -> bool:
+    """A hand-edited value of the wrong type is ignored (the default is used)."""
+    if isinstance(default, bool):
+        return isinstance(value, bool)
+    if isinstance(default, (int, float)):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, type(default))
+
+
 class Settings:
     def __init__(self, path: Path, library_dir: Path | None = None) -> None:
         self.path = Path(path)
@@ -58,7 +70,7 @@ class Settings:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 for key, value in data.items():
-                    if key in DEFAULTS:
+                    if key in DEFAULTS and _same_type(value, DEFAULTS[key]):
                         self._values[key] = value
         except FileNotFoundError:
             pass

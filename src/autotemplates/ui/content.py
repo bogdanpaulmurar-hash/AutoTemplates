@@ -8,7 +8,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtGui import QTextDocument
+from PySide6.QtGui import QFont, QTextDocument
 
 from autotemplates.core import formats, highlight
 from autotemplates.core.library import Template
@@ -23,6 +23,7 @@ class Rendered:
     text: str
     image: Path | None = None
     variables: bool = True  # code files are inserted verbatim
+    rtf: bytes = b""  # original RTF (.rtf templates): Word/Outlook paste it with every detail, pictures included
 
 
 _SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=")([^"]+)(")', re.I)
@@ -56,7 +57,7 @@ class Renderer:
         path = tpl.path(root)
         s = self.settings
         key = (str(path), tpl.mtime, tpl.size, s.get("code_style"), s.get("code_font_family"), s.get("code_font_size"),
-               s.get("code_background"))
+               s.get("code_background"), s.get("editor_font_family"), s.get("editor_font_size"))
         hit = self._cache.get(key)
         if hit is not None:
             self._cache.move_to_end(key)
@@ -83,6 +84,9 @@ class Renderer:
             if kind == "markdown":
                 source = formats.read_text(path)
                 doc = QTextDocument()
+                # The base font goes on <body>; without this it would be Qt's default UI font.
+                doc.setDefaultFont(QFont(self.settings.get("editor_font_family") or "Segoe UI",
+                                         int(self.settings.get("editor_font_size") or 11)))
                 doc.setMarkdown(source)
                 return Rendered(absolutize_images(doc.toHtml(), path.parent), source)
             if kind == "code":
@@ -92,8 +96,9 @@ class Renderer:
                 source = formats.read_text(path)
                 return Rendered(highlight.text_html(source), source)
             if kind == "rtf":
-                source = formats.rtf_to_text(formats.read_text(path))
-                return Rendered(highlight.text_html(source), source)
+                raw = path.read_bytes()
+                source = raw.decode("latin-1")  # RTF is 7-bit; \'hh escapes are decoded by the parser
+                return Rendered(formats.rtf_to_html(source), formats.rtf_to_text(source), rtf=raw)
             if kind == "docx":
                 media = self.cache_dir / "docx" / f"{abs(hash(str(path))) & 0xFFFFFFFF:08x}"
                 result = formats.docx_to_html(path, media)

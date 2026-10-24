@@ -4,21 +4,17 @@
 * ``markdown`` .md/.markdown
 * ``text``     .txt/.log/.csv
 * ``code``     source files, highlighted with Pygments when inserted
-* ``docx``     Word documents, converted to HTML with the standard library
-* ``rtf``      Rich Text, read as plain text
+* ``docx``     Word documents, converted to HTML with the standard library (``docx_html``)
+* ``rtf``      Rich Text: the original RTF goes to the clipboard, plus HTML made from it
 * ``image``    png/jpg/gif/bmp/webp, inserted as a picture
 """
 
 from __future__ import annotations
 
-import hashlib
 import html as htmllib
 import re
-import zipfile
-from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from xml.etree import ElementTree as ET
 
 RICH_EXT = {".html", ".htm"}
 MARKDOWN_EXT = {".md", ".markdown"}
@@ -184,12 +180,20 @@ _RTF_SPECIAL = {"par": "\n", "sect": "\n\n", "page": "\n\n", "line": "\n", "tab"
 _RTF_TOKEN = re.compile(r"\\([a-z]{1,32})(-?\d{1,10})?[ ]?|\\'([0-9a-f]{2})|\\([^a-z])|([{}])|[\r\n]+|(.)", re.I | re.S)
 
 
+def _decode_byte(value: int, codepage: str) -> str:
+    try:
+        return bytes([value]).decode(codepage, errors="replace")
+    except LookupError:
+        return bytes([value]).decode("cp1252", errors="replace")
+
+
 def rtf_to_text(rtf: str) -> str:
     """Plain text of an RTF document (the classic striprtf state machine)."""
     stack: list[tuple[int, bool]] = []
     ignorable = False
     ucskip = 1
     curskip = 0
+    codepage = "cp1252"
     out: list[str] = []
     for match in _RTF_TOKEN.finditer(rtf):
         word, arg, hexcode, char, brace, tchar = match.groups()
@@ -217,6 +221,8 @@ def rtf_to_text(rtf: str) -> str:
                 pass
             elif word in _RTF_SPECIAL:
                 out.append(_RTF_SPECIAL[word])
+            elif word == "ansicpg" and arg:
+                codepage = f"cp{int(arg)}"
             elif word == "uc":
                 ucskip = int(arg or 1)
             elif word == "u":
@@ -227,7 +233,7 @@ def rtf_to_text(rtf: str) -> str:
             if curskip > 0:
                 curskip -= 1
             elif not ignorable:
-                out.append(bytes([int(hexcode, 16)]).decode("cp1252", errors="replace"))
+                out.append(_decode_byte(int(hexcode, 16), codepage))
         elif tchar:
             if curskip > 0:
                 curskip -= 1
@@ -236,199 +242,234 @@ def rtf_to_text(rtf: str) -> str:
     return "".join(out).strip()
 
 
+_RTF_ALIGN = {"qc": "center", "qr": "right", "qj": "justify", "ql": ""}
+_RTF_UL_ON = {"ul", "uld", "uldash", "uldashd", "uldashdd", "uldb", "ulhwave", "ulldash", "ulth", "ulthd",
+              "ulthdash", "ulthdashd", "ulthdashdd", "ulthldash", "ululdbwave", "ulw", "ulwave"}
+
+
+def _rtf_run_html(text: str, props: dict, fonts: dict, colors: list) -> str:
+    if not text:
+        return ""
+    body = htmllib.escape(text).replace("\t", "&emsp;").replace("\n", "<br/>")
+    body = re.sub(r"  +", lambda m: "&nbsp;" * len(m.group(0)), body)
+    styles = []
+    font = fonts.get(props.get("f"))
+    if font:
+        styles.append(f"font-family:'{font}'")
+    if props.get("fs"):
+        styles.append(f"font-size:{props['fs'] / 2:g}pt")
+    for key, css in (("cf", "color"), ("bg", "background-color")):
+        idx = props.get(key)
+        if idx and 0 < idx < len(colors) and colors[idx]:
+            styles.append(f"{css}:{colors[idx]}")
+    if props.get("b"):
+        body = f"<b>{body}</b>"
+    if props.get("i"):
+        body = f"<i>{body}</i>"
+    if props.get("ul"):
+        body = f"<u>{body}</u>"
+    if props.get("strike"):
+        body = f"<s>{body}</s>"
+    if props.get("va") == "super":
+        body = f"<sup>{body}</sup>"
+    elif props.get("va") == "sub":
+        body = f"<sub>{body}</sub>"
+    if styles:
+        body = f'<span style="{";".join(styles)}">{body}</span>'
+    if props.get("link"):
+        body = f'<a href="{htmllib.escape(props["link"], quote=True)}">{body}</a>'
+    return body
+
+
+def rtf_to_html(rtf: str) -> str:
+    """Formatted HTML of an RTF document: fonts, sizes, colours, bold/italic/underline/strike,
+    super/subscript, alignment, paragraphs, bullets and hyperlinks (pictures stay in the RTF itself)."""
+    fonts: dict[int, str] = {}
+    colors: list[str] = []
+    cur_color: dict[str, int] = {}
+    codepage = "cp1252"
+    deff: int | None = None
+
+    # state = (char props, paragraph props, ignorable, ucskip, destination)
+    props: dict = {}
+    para: dict = {}
+    ignorable, ucskip, dest = False, 1, ""
+    stack: list[tuple] = []
+    curskip = 0
+    font_num: int | None = None
+    font_name: list[str] = []
+    fldinst: list[str] = []
+    paragraphs: list[tuple[dict, list[tuple[str, dict]]]] = []
+    runs: list[tuple[str, dict]] = []
+
+    def emit(text: str) -> None:
+        if dest == "fonttbl":
+            font_name.append(text)
+        elif dest == "fldinst":
+            fldinst.append(text)
+        elif dest == "colortbl":
+            pass
+        elif not ignorable:
+            run_props = {} if dest == "listtext" else props  # bullets: no Symbol/Wingdings font
+            if runs and runs[-1][1] == run_props:
+                runs[-1] = (runs[-1][0] + text, runs[-1][1])
+            else:
+                runs.append((text, dict(run_props)))
+
+    def end_paragraph() -> None:
+        nonlocal runs
+        paragraphs.append((dict(para), runs))
+        runs = []
+
+    for match in _RTF_TOKEN.finditer(rtf):
+        word, arg, hexcode, char, brace, tchar = match.groups()
+        if brace:
+            curskip = 0
+            if brace == "{":
+                stack.append((dict(props), dict(para), ignorable, ucskip, dest))
+            elif stack:
+                closing = dest
+                if closing == "fonttbl" and font_num is not None and font_name:
+                    fonts[font_num] = "".join(font_name).strip().rstrip(";").strip()
+                    font_num, font_name = None, []
+                props, para, ignorable, ucskip, dest = stack.pop()
+                if closing == "fldinst" and dest != "fldinst":
+                    m = re.search(r'HYPERLINK\s+"([^"]+)"', "".join(fldinst))
+                    fldinst = []
+                    if m:
+                        props["link"] = m.group(1)
+            continue
+        if char:
+            curskip = 0
+            if char == "~":
+                emit("\xa0")
+            elif char in "{}\\":
+                emit(char)
+            elif char == "*":
+                ignorable = True
+            elif char == "-" or char == "_":
+                emit("-" if char == "_" else "")
+            continue
+        if word:
+            curskip = 0
+            num = int(arg) if arg is not None else None
+            if word == "fonttbl":
+                dest, ignorable = "fonttbl", False
+                continue
+            if word == "colortbl":
+                dest, ignorable = "colortbl", False
+                continue
+            if word == "fldinst":
+                dest, ignorable = "fldinst", False
+                continue
+            if word == "field" and not ignorable:
+                continue
+            if word in ("listtext", "pntext") and not ignorable:
+                dest = "listtext"
+                continue
+            if dest == "fonttbl":
+                if word == "f":
+                    if font_num is not None and font_name:
+                        fonts[font_num] = "".join(font_name).strip().rstrip(";").strip()
+                    font_num, font_name = num, []
+                continue
+            if dest == "colortbl":
+                if word in ("red", "green", "blue"):
+                    cur_color[word] = num or 0
+                continue
+            if word in _RTF_DEST:
+                ignorable = True
+                continue
+            if ignorable:
+                continue
+            if word == "ansicpg" and num:
+                codepage = f"cp{num}"
+            elif word == "deff":
+                deff = num
+            elif word == "uc":
+                ucskip = num if num is not None else 1
+            elif word == "u":
+                code = num or 0
+                emit(chr(code + 0x10000 if code < 0 else code))
+                curskip = ucskip
+            elif word == "par" or word == "sect" or word == "page" or word == "row":
+                end_paragraph()
+            elif word in ("line",):
+                emit("\n")
+            elif word in _RTF_SPECIAL:
+                emit(_RTF_SPECIAL[word])
+            elif word == "plain":
+                link = props.get("link")
+                props = {"link": link} if link else {}
+            elif word == "pard":
+                para = {}
+            elif word in _RTF_ALIGN:
+                para["align"] = _RTF_ALIGN[word]
+            elif word in ("b", "i", "strike", "striked"):
+                props["strike" if word.startswith("strike") else word] = num != 0
+            elif word in _RTF_UL_ON:
+                props["ul"] = num != 0
+            elif word == "ulnone":
+                props["ul"] = False
+            elif word == "fs":
+                props["fs"] = num
+            elif word == "f":
+                props["f"] = num
+            elif word == "cf":
+                props["cf"] = num
+            elif word in ("highlight", "cb", "chcbpat"):
+                props["bg"] = num
+            elif word == "super":
+                props["va"] = "super"
+            elif word == "sub":
+                props["va"] = "sub"
+            elif word == "nosupersub":
+                props.pop("va", None)
+            continue
+        if hexcode:
+            if curskip > 0:
+                curskip -= 1
+                continue
+            raw = bytes([int(hexcode, 16)])
+            if dest == "listtext":
+                emit("\u2022" if raw in (b"\xb7", b"\xa7", b"\x95") else _decode_byte(raw[0], codepage))
+            else:
+                emit(_decode_byte(raw[0], codepage))
+            continue
+        if tchar:
+            if curskip > 0:
+                curskip -= 1
+                continue
+            if dest == "colortbl" and tchar == ";":
+                colors.append("#%02x%02x%02x" % (cur_color.get("red", 0), cur_color.get("green", 0),
+                                                  cur_color.get("blue", 0)) if cur_color else "")
+                cur_color = {}
+            else:
+                emit(tchar)
+    if runs:
+        end_paragraph()
+
+    if deff is not None and deff in fonts:
+        fonts.setdefault(-1, fonts[deff])
+    out: list[str] = []
+    for para_props, para_runs in paragraphs:
+        parts = []
+        for text, run_props in para_runs:
+            if "f" not in run_props and deff is not None:
+                run_props = {**run_props, "f": deff}
+            parts.append(_rtf_run_html(text, run_props, fonts, colors))
+        style = "margin:0"
+        if para_props.get("align"):
+            style += f";text-align:{para_props['align']}"
+        out.append(f'<p style="{style}">{"".join(parts) or "&nbsp;"}</p>')
+    while out and out[-1].endswith(">&nbsp;</p>"):
+        out.pop()
+    return "<html><body>" + "".join(out) + "</body></html>"
+
+
 # --------------------------------------------------------------------------- docx
 
-W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
-A_BLIP = "{http://schemas.openxmlformats.org/drawingml/2006/main}blip"
-_HIGHLIGHT = {"yellow": "#ffff00", "green": "#00ff00", "cyan": "#00ffff", "magenta": "#ff00ff", "blue": "#0000ff",
-              "red": "#ff0000", "darkBlue": "#000080", "darkCyan": "#008080", "darkGreen": "#008000",
-              "darkMagenta": "#800080", "darkRed": "#800000", "darkYellow": "#808000", "darkGray": "#808080",
-              "lightGray": "#c0c0c0", "black": "#000000", "white": "#ffffff"}
-
-
-@dataclass
-class DocxResult:
-    html: str
-    text: str
-    images: list[Path] = field(default_factory=list)
-
-
-def docx_to_html(path: Path, media_dir: Path | None = None) -> DocxResult:
-    """Paragraphs, headings, lists, tables, run formatting and pictures of a .docx.
-
-    Pictures are extracted to ``media_dir`` (when given) and referenced as files,
-    which Word and Outlook accept when the HTML is pasted.
-    """
-    with zipfile.ZipFile(path) as zf:
-        root = ET.fromstring(zf.read("word/document.xml"))
-        rels: dict[str, str] = {}
-        try:
-            for rel in ET.fromstring(zf.read("word/_rels/document.xml.rels")):
-                rels[rel.get("Id", "")] = rel.get("Target", "")
-        except KeyError:
-            pass
-        images: list[Path] = []
-        image_src: dict[str, str] = {}
-
-        def picture(rid: str) -> str:
-            if rid in image_src:
-                return image_src[rid]
-            target = rels.get(rid, "")
-            src = ""
-            if target and media_dir is not None:
-                name = "word/" + target.lstrip("/") if not target.startswith("word/") else target
-                try:
-                    data = zf.read(name)
-                except KeyError:
-                    data = b""
-                if data:
-                    media_dir.mkdir(parents=True, exist_ok=True)
-                    out = media_dir / (hashlib.sha1(data).hexdigest()[:12] + Path(target).suffix.lower())
-                    if not out.exists():
-                        out.write_bytes(data)
-                    images.append(out)
-                    src = out.as_uri()
-            image_src[rid] = src
-            return src
-
-        text_parts: list[str] = []
-
-        def run_html(run: ET.Element) -> str:
-            pieces: list[str] = []
-            for child in run:
-                tag = child.tag
-                if tag == W + "t":
-                    pieces.append(htmllib.escape(child.text or ""))
-                    text_parts.append(child.text or "")
-                elif tag == W + "tab":
-                    pieces.append("&emsp;")
-                    text_parts.append("\t")
-                elif tag in (W + "br", W + "cr"):
-                    pieces.append("<br/>")
-                    text_parts.append("\n")
-                elif tag == W + "drawing" or tag.endswith("}pict"):
-                    for blip in child.iter(A_BLIP):
-                        src = picture(blip.get(R_NS + "embed", ""))
-                        if src:
-                            pieces.append(f'<img src="{src}"/>')
-                            text_parts.append("[image]")
-            body = "".join(pieces)
-            if not body:
-                return ""
-            rpr = run.find(W + "rPr")
-            if rpr is None:
-                return body
-            styles: list[str] = []
-
-            def on(name: str) -> bool:
-                el = rpr.find(W + name)
-                return el is not None and el.get(W + "val", "true") not in ("0", "false", "none")
-
-            color = rpr.find(W + "color")
-            if color is not None and color.get(W + "val", "auto") != "auto":
-                styles.append(f"color:#{color.get(W + 'val')}")
-            hl = rpr.find(W + "highlight")
-            if hl is not None and hl.get(W + "val") in _HIGHLIGHT:
-                styles.append(f"background-color:{_HIGHLIGHT[hl.get(W + 'val')]}")
-            shd = rpr.find(W + "shd")
-            if shd is not None and shd.get(W + "fill", "auto") not in ("auto", ""):
-                styles.append(f"background-color:#{shd.get(W + 'fill')}")
-            sz = rpr.find(W + "sz")
-            if sz is not None and (sz.get(W + "val") or "").isdigit():
-                styles.append(f"font-size:{int(sz.get(W + 'val')) / 2:g}pt")
-            fonts = rpr.find(W + "rFonts")
-            if fonts is not None and fonts.get(W + "ascii"):
-                styles.append(f"font-family:'{fonts.get(W + 'ascii')}'")
-            if on("b"):
-                body = f"<b>{body}</b>"
-            if on("i"):
-                body = f"<i>{body}</i>"
-            if on("u"):
-                body = f"<u>{body}</u>"
-            if on("strike") or on("dstrike"):
-                body = f"<s>{body}</s>"
-            va = rpr.find(W + "vertAlign")
-            if va is not None and va.get(W + "val") in ("superscript", "subscript"):
-                body = f"<sup>{body}</sup>" if va.get(W + "val") == "superscript" else f"<sub>{body}</sub>"
-            return f'<span style="{";".join(styles)}">{body}</span>' if styles else body
-
-        def inline_html(parent: ET.Element) -> str:
-            out = []
-            for child in parent:
-                if child.tag == W + "r":
-                    out.append(run_html(child))
-                elif child.tag == W + "hyperlink":
-                    target = rels.get(child.get(R_NS + "id", ""), "")
-                    inner = inline_html(child)
-                    out.append(f'<a href="{htmllib.escape(target, quote=True)}">{inner}</a>' if target else inner)
-                elif child.tag in (W + "ins", W + "smartTag", W + "sdt", W + "sdtContent", W + "fldSimple"):
-                    out.append(inline_html(child))
-            return "".join(out)
-
-        def paragraph_html(p: ET.Element) -> tuple[str, str | None]:
-            ppr = p.find(W + "pPr")
-            tag, styles, list_kind = "p", [], None
-            if ppr is not None:
-                style = ppr.find(W + "pStyle")
-                sval = (style.get(W + "val") if style is not None else "") or ""
-                m = re.match(r"(?i)heading\s*([1-6])|titlu\s*([1-6])", sval)
-                if m:
-                    tag = f"h{m.group(1) or m.group(2)}"
-                elif sval.lower() == "title":
-                    tag = "h1"
-                jc = ppr.find(W + "jc")
-                if jc is not None and jc.get(W + "val") in ("center", "right", "both", "end"):
-                    styles.append("text-align:" + {"both": "justify", "end": "right"}.get(jc.get(W + "val"), jc.get(W + "val")))
-                if ppr.find(W + "numPr") is not None or sval.lower().startswith("list"):
-                    list_kind = "ol" if "number" in sval.lower() else "ul"
-            content = inline_html(p) or "&nbsp;"
-            text_parts.append("\n")
-            attr = f' style="{";".join(styles)}"' if styles else ""
-            if list_kind:
-                return f"<li{attr}>{content}</li>", list_kind
-            return f"<{tag}{attr}>{content}</{tag}>", None
-
-        def block_html(parent: ET.Element) -> str:
-            out: list[str] = []
-            open_list: str | None = None
-            for child in parent:
-                if child.tag == W + "p":
-                    markup, kind = paragraph_html(child)
-                    if kind != open_list:
-                        if open_list:
-                            out.append(f"</{open_list}>")
-                        if kind:
-                            out.append(f"<{kind}>")
-                        open_list = kind
-                    out.append(markup)
-                    continue
-                if open_list:
-                    out.append(f"</{open_list}>")
-                    open_list = None
-                if child.tag == W + "tbl":
-                    rows = []
-                    for tr in child.findall(W + "tr"):
-                        cells = "".join(f"<td>{block_html(tc)}</td>" for tc in tr.findall(W + "tc"))
-                        rows.append(f"<tr>{cells}</tr>")
-                        text_parts.append("\n")
-                    out.append('<table border="1" cellspacing="0" cellpadding="4">' + "".join(rows) + "</table>")
-                elif child.tag == W + "sdt":
-                    content = child.find(W + "sdtContent")
-                    if content is not None:
-                        out.append(block_html(content))
-            if open_list:
-                out.append(f"</{open_list}>")
-            return "".join(out)
-
-        body = root.find(W + "body")
-        markup = block_html(body) if body is not None else ""
-    text = re.sub(r"\n{3,}", "\n\n", "".join(text_parts)).strip()
-    return DocxResult(f"<html><body>{markup}</body></html>", text, images)
-
-
-def docx_text(path: Path) -> str:
-    return docx_to_html(path, None).text
+from autotemplates.core.docx_html import DocxResult, docx_text, docx_to_html  # noqa: E402,F401  (re-exported)
 
 
 # --------------------------------------------------------------------------- index text

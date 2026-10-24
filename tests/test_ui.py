@@ -421,3 +421,93 @@ def test_editor_tree_folder_move_rename_delete(qapp, home, monkeypatch):
     assert ed.current is None
     assert c.settings.get("noteit_folder") == "Notes"  # back to the default
     assert not any(t.rel.startswith("Notes/") for t in c.library.templates)
+
+
+def test_rtf_template_keeps_original_rtf_and_formatted_html(qapp, home):
+    from conftest import SAMPLE_RTF
+    from autotemplates.ui.inserter import RTF_MIME
+
+    c = _controller(qapp, home)
+    (c.library.root / "Semnătură.rtf").write_bytes(SAMPLE_RTF.encode("latin-1"))
+    c.rescan(sync=True)
+    tpl = c.library.get("Semnătură.rtf")
+    r = c.renderer.render(tpl, c.library.root)
+    assert r.rtf == SAMPLE_RTF.encode("latin-1") and "<b>Titlu</b>" in r.html and "Titlu" in r.text
+    html, text, _ = c.inserter.prepare(r, plain=False)
+    rich = c.inserter.mime_for(r, html, text, plain=False)
+    assert RTF_MIME in rich.formats() and bytes(rich.data(RTF_MIME)) == r.rtf
+    assert rich.html().count("<!--StartFragment-->") == 1 and "<b>Titlu</b>" in rich.html()
+    plain = c.inserter.mime_for(r, html, text, plain=True)
+    assert RTF_MIME not in plain.formats() and not plain.hasHtml() and plain.text() == text
+
+
+def test_rtf_with_variables_uses_filled_html_only(qapp, home):
+    from autotemplates.ui.content import Rendered
+    from autotemplates.ui.inserter import RTF_MIME
+
+    c = _controller(qapp, home)
+    r = Rendered("<p>Azi {date}</p>", "Azi {date}", rtf=rb"{\rtf1 Azi \{date\}\par}")
+    html, text, _ = c.inserter.prepare(r, plain=False)
+    m = c.inserter.mime_for(r, html, text, plain=False)
+    assert RTF_MIME not in m.formats() and "{date}" not in m.html()
+
+
+def test_clipboard_html_base_font_and_pictures(qapp, home, tmp_path):
+    import base64
+    import re
+
+    from autotemplates.ui.content import Rendered
+
+    c = _controller(qapp, home)
+    c.settings.update({"editor_font_family": "Calibri", "editor_font_size": 12})
+    pic = tmp_path / "s.png"
+    QImage(1600, 900, QImage.Format_RGB32).save(str(pic))
+    original = pic.read_bytes()
+    r = Rendered(f'<p>Salut <img src="{pic.as_uri()}" width="800" height="450"/></p>', "Salut")
+    html, text, _ = c.inserter.prepare(r, plain=False)
+
+    office = c.inserter.clipboard_html(html, "outlook.exe")
+    assert "font-family:Calibri;font-size:12pt" in office and pic.as_uri() in office
+    web = c.inserter.clipboard_html(html, "chrome.exe")
+    data = re.search(r'src="data:image/png;base64,([^"]+)"', web).group(1)
+    assert base64.b64decode(data) == original and 'width="800" height="450"' in web  # original quality
+
+    c.settings.set("insert_base_font", "target")
+    assert "Calibri" not in c.inserter.clipboard_html(html, "outlook.exe")
+    c.settings.set("insert_images", "file")
+    assert pic.as_uri() in c.inserter.clipboard_html(html, "chrome.exe")
+
+
+def test_markdown_and_editor_templates_carry_their_font_into_the_fragment(qapp, home):
+    import re
+
+    c = _controller(qapp, home)
+    c.settings.update({"editor_font_family": "Verdana", "editor_font_size": 13})
+    (c.library.root / "Nota.md").write_text("# Titlu\n\nText **bold** și `cod`\n", encoding="utf-8")
+    c.rescan(sync=True)
+    r = c.renderer.render(c.library.get("Nota.md"), c.library.root)
+    html, text, _ = c.inserter.prepare(r, plain=False)
+    out = c.inserter.clipboard_html(html, "ms-teams.exe")
+    frag = re.search(r"<!--StartFragment-->(.*)<!--EndFragment-->", out, re.S).group(1)
+    assert "Verdana" in frag and "13pt" in frag  # the body font now lives inside the fragment
+    assert "-qt-" not in frag and "bold" in frag
+    assert "Consolas" in frag or "Courier New" in frag  # inline code: a font Office knows
+
+
+def test_insert_mode_template_setting_and_shift(qapp, home):
+    from autotemplates.core import formats
+
+    c = _controller(qapp, home)
+    lib = c.library.root
+    (lib / "Implicit.html").write_text("<html><head></head><body><b>x</b></body></html>", encoding="utf-8")
+    (lib / "Simplu.html").write_text(formats.write_meta("<html><head></head><body><b>x</b></body></html>",
+                                                       {"mode": "plain"}), encoding="utf-8")
+    (lib / "Bogat.html").write_text(formats.write_meta("<html><head></head><body><b>x</b></body></html>",
+                                                      {"mode": "rich"}), encoding="utf-8")
+    c.rescan(sync=True)
+    c.settings.set("insert_mode", "rich")
+    assert not c._plain("Implicit.html", False) and c._plain("Implicit.html", True)
+    assert c._plain("Simplu.html", False) and not c._plain("Simplu.html", True)
+    c.settings.set("insert_mode", "plain")
+    assert c._plain("Implicit.html", False) and not c._plain("Implicit.html", True)
+    assert not c._plain("Bogat.html", False) and c._plain("Bogat.html", True)
