@@ -25,7 +25,7 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 - Office integration only through COM with a fallback (`OfficeUnavailable`); never send mail automatically.
 - Clipboard HTML goes through `core/clipboard_html.py` (styles inline inside the fragment). Pictures are never recompressed or scaled.
 - Backups (`core/backup.py`): restore never overwrites templates and never takes machine-specific settings (`LOCAL_KEYS`); bump `FORMAT_VERSION` when the zip layout changes.
-- Status 0.3.2: hotkey, paste, clipboard, the Office COM calls, the COM paste and backup/restore not yet tested on Windows — verify there before building on them.
+- Status 0.3.3: hotkey, paste, clipboard, the Office COM calls, the COM paste, backup/restore and the grouped picker not yet tested on Windows — verify there before building on them.
 
 ## Shared context
 Project overview and open bugs/changes live in two Google Docs: **PROIECTE_CONTEXT (live)** and **MODIFICARI_PROIECTE (live)** — read only the AutoTemplates section. Remove items from MODIFICARI once implemented and confirmed.

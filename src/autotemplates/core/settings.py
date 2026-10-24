@@ -34,8 +34,11 @@ DEFAULTS: dict[str, Any] = {
     "picker_width": 720,
     "picker_height": 440,
     "picker_show_preview": True,
-    "picker_sort": "smart",  # smart (favourites, use count, recent) | name
-    "picker_group_categories": False,
+    "picker_sort": "smart",  # smart (favourites, use count, recent) | name | recent (last use)
+    "picker_view": "groups",  # groups (one group per folder, ★ and Recent on top) | list
+    "picker_recent_count": 5,  # templates in the Recent group (0 = no Recent group)
+    "picker_favourites_in_folder": True,  # favourites also stay in their folder group
+    "picker_collapsed": [],  # group keys folded in the grouped view
     "stats_keep_days": 30,  # statistics of deleted templates are kept this long (restore from the Recycle Bin)
     "editor_font_family": "Segoe UI",
     "editor_font_size": 11,

@@ -348,6 +348,8 @@ class Library:
             scored.append((score, t))
         if sort == "smart" or words:
             scored.sort(key=lambda st: (-st[0], fold(st[1].category), fold(st[1].name)))
+        elif sort == "recent":
+            scored.sort(key=lambda st: (-self.usage.last(st[1].rel), fold(st[1].category), fold(st[1].name)))
         return [t for _, t in scored[:limit]]
 
 

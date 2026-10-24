@@ -161,6 +161,22 @@ class SettingsDialog(QDialog):
             self.sort.setCurrentIndex(idx)
         inf.addRow(t("settings.sort"), self.sort)
 
+        self.view = QComboBox()
+        self.view.addItem(t("settings.view_groups"), "groups")
+        self.view.addItem(t("settings.view_list"), "list")
+        self.view.setCurrentIndex(max(0, self.view.findData(s.get("picker_view"))))
+        inf.addRow(t("settings.view"), self.view)
+
+        self.recent_count = QSpinBox()
+        self.recent_count.setRange(0, 20)
+        self.recent_count.setValue(int(s.get("picker_recent_count")))
+        self.recent_count.setToolTip(t("settings.recent_count_tip"))
+        inf.addRow(t("settings.recent_count"), self.recent_count)
+
+        self.favs_in_folder = QCheckBox(t("settings.favourites_in_folder"))
+        self.favs_in_folder.setChecked(bool(s.get("picker_favourites_in_folder")))
+        inf.addRow("", self.favs_in_folder)
+
         self.stats_days = QSpinBox()
         self.stats_days.setRange(0, 3650)
         self.stats_days.setValue(int(s.get("stats_keep_days")))
@@ -418,6 +434,9 @@ class SettingsDialog(QDialog):
             "restore_delay_ms": self.restore_delay.value(),
             "picker_show_preview": self.preview.isChecked(),
             "picker_sort": self.sort.currentData(),
+            "picker_view": self.view.currentData(),
+            "picker_recent_count": self.recent_count.value(),
+            "picker_favourites_in_folder": self.favs_in_folder.isChecked(),
             "stats_keep_days": self.stats_days.value(),
             "picker_width": self.pw.value(),
             "picker_height": self.ph.value(),

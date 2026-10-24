@@ -43,15 +43,22 @@ py -3 -m venv .venv
 | ↑ ↓ PgUp PgDn | choose |
 | **Enter** | insert with formatting (HTML + plain text on the clipboard, the target program takes the best one) |
 | **Shift+Enter** | insert as plain text |
-| Alt+1 … Alt+9 | insert the n-th result |
+| Alt+1 … Alt+9 | insert the n-th result (headers are not counted) |
 | Ctrl+C / Ctrl+Shift+C | copy only (formatted / plain) |
 | Ctrl+E · Ctrl+N · Ctrl+D | edit · new template · favourite |
 | Tab / Shift+Tab | next / previous category |
+| Ctrl+G (or the folder button) | grouped view ↔ plain list (remembered) |
+| ← / → · Ctrl+↑ / Ctrl+↓ | grouped view: fold / open the current group · previous / next group |
 | Esc | close |
 
 The clipboard you had before is restored after the insertion (setting).
 
 Ordering is *smart* by default: exact shortcut match, favourites, frequently and recently used templates first.
+
+The list is **grouped** by default: ★ Favourites and Recent (the last 5 used) on top, then one foldable group per
+folder. Folded groups are remembered; while you type, only the groups with results are shown, all open, the best
+match first. Settings → Insert: view (groups / list), number of recent templates (0 = none), whether favourites also
+stay in their folder.
 
 ### Variables
 

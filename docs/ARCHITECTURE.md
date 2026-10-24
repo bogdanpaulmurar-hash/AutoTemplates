@@ -10,6 +10,7 @@ src/autotemplates/
     paths.py           %LOCALAPPDATA%\AutoTemplates (settings, index, usage, logs)
     settings.py        JSON settings with defaults and change listeners
     library.py         folder scan, cached index, search/ranking, usage + favourites (+ retention of deleted)
+    grouping.py        picker groups: ★ Favourites, Recent, one per folder (order rules for browsing vs searching)
     folders.py         editor tree ops: move/rename/merge/delete folders and templates, index + usage kept in step
     formats.py         file kinds, rtf → HTML/text, HTML → text, <meta> metadata
     docx_html.py       docx → HTML with styles.xml, theme fonts, numbering.xml, spacing, sized pictures
@@ -27,7 +28,7 @@ src/autotemplates/
                        raises OfficeUnavailable → UI fallback
   ui/
     app.py             Controller: tray, hotkey → picker → insert, watcher, actions
-    picker.py          the Ctrl+Q list (built once, then shown/hidden)
+    picker.py          the Ctrl+Q list (built once, then shown/hidden); list or grouped view with foldable headers
     launcher.py        optional card at the cursor on the hotkey: NoteIT or Templates
     noteit.py          NoteIT quick-note window (draft/last note, save, Outlook, OneNote)
     content.py         template → (HTML, text, image) with a small render cache
