@@ -26,7 +26,7 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 - Clipboard HTML goes through `core/clipboard_html.py` (styles inline inside the fragment). Pictures are never recompressed or scaled.
 - Backups (`core/backup.py`): restore never overwrites templates and never takes machine-specific settings (`LOCAL_KEYS`); bump `FORMAT_VERSION` when the zip layout changes.
 - Shortcuts live in `core/shortcuts.py` and are listed in the in-app guide (`core/guide.py`, F1): a new shortcut, variable or setting the user should know about gets a line there too (`tests/test_guide.py` checks shortcuts and variables).
-- Status 0.3.4: hotkey, paste, clipboard, the Office COM calls, the COM paste, backup/restore, the grouped picker and the guide window not yet tested on Windows — verify there before building on them.
+- Status 0.3.5: `--self-test` passes on Windows (it caught a picker crash the offscreen tests missed — run it after UI changes); hotkey, paste, clipboard, the Office COM calls, the COM paste, backup/restore, the grouped picker and the guide window not yet tested on Windows — verify there before building on them.
 
 ## Shared context
 Project overview and open bugs/changes live in two Google Docs: **PROIECTE_CONTEXT (live)** and **MODIFICARI_PROIECTE (live)** — read only the AutoTemplates section. Remove items from MODIFICARI once implemented and confirmed.

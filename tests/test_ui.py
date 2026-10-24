@@ -28,6 +28,14 @@ def test_samples_render(qapp, home):
     assert not r.variables and "<pre" in r.html and "def main" in r.text
 
 
+def test_picker_opens(qapp, home):
+    # Regression: the search field's event filter fired before the list existed.
+    c = _controller(qapp, home)
+    c.picker.popup(None)
+    assert c.picker.list.count() > 0
+    c.picker.hide()
+
+
 def test_prepare_variables_and_cursor(qapp, home):
     c = _controller(qapp, home)
     tpl = next(t for t in c.library.templates if t.category == "Email")

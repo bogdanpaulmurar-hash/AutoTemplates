@@ -494,7 +494,9 @@ class Picker(QWidget):
             self.list.setCurrentRow(row)
 
     def eventFilter(self, obj, event) -> bool:
-        if obj in (self.search, self.list) and event.type() == QEvent.KeyPress:
+        # Events can arrive while __init__ is still building the widgets.
+        lst = getattr(self, "list", None)
+        if lst is not None and obj in (self.search, lst) and event.type() == QEvent.KeyPress:
             key, mods = event.key(), event.modifiers()
             if key in (Qt.Key_Down, Qt.Key_Up) and mods & Qt.ControlModifier:
                 self._jump_group(1 if key == Qt.Key_Down else -1)
