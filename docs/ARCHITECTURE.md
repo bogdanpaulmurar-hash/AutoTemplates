@@ -9,7 +9,8 @@ src/autotemplates/
   core/                Qt-free, unit-tested
     paths.py           %LOCALAPPDATA%\AutoTemplates (settings, index, usage, logs)
     settings.py        JSON settings with defaults and change listeners
-    library.py         folder scan, cached index, search/ranking, usage + favourites
+    library.py         folder scan, cached index, search/ranking, usage + favourites (+ retention of deleted)
+    folders.py         editor tree ops: move/rename/merge/delete folders and templates, index + usage kept in step
     formats.py         file kinds, docx → HTML, rtf → text, HTML → text, <meta> metadata
     variables.py       {date} {time} {clipboard} {input:…} {cursor} …
     highlight.py       language detection + inline-styled Pygments HTML
@@ -28,6 +29,7 @@ src/autotemplates/
     content.py         template → (HTML, text, image) with a small render cache
     inserter.py        clipboard backup → HTML+text → focus target → Ctrl+V → restore
     editor.py          library tree + editors (rich / code / read-only)
+    librarytree.py     tree widget: drag & drop reports source + target, the editor moves the files
     richedit.py        QTextEdit commands, pasted pictures, saving pictures to <name>.assets
     codeedit.py        QPlainTextEdit + Pygments highlighter
     settings_dialog.py
@@ -82,3 +84,17 @@ synced. Renaming a template renames its assets folder; unused pictures are delet
 - Code, commits and technical docs in English; user-facing progress updates in Romanian; UI in RO + EN.
 - No `.exe`; install with `Install.bat` (private venv, `pythonw`, tray, autostart).
 - Behaviour is configured in Settings, not hard-coded.
+## Editor tree operations
+
+`core/folders.py` moves, renames, merges and deletes folders and templates; the editor only asks
+the questions. Rules:
+
+- Nothing is ever overwritten: a template with the same name gets `Name (2)` (its `.assets` folder and
+  the `src` of its pictures follow); a folder with the same name → the user picks *Merge* or *Keep both*.
+- A folder cannot go into itself or a sub-folder of itself.
+- Delete goes to the Recycle Bin; if the bin refuses (cloud drives), the user is asked before a permanent delete.
+- The index and the usage statistics are updated in the same operation (`Library.apply_moves`,
+  `Usage.rename_many`); the controller pauses the folder watcher meanwhile (`library_operation`) and rescans once.
+- Statistics of deleted templates are kept `stats_keep_days` days (setting) so a restore from the bin
+  gets them back; `Usage.purge` runs after each scan.
+- The open template, the NoteIT folder setting and an unsaved new template follow a moved folder.

@@ -369,3 +369,55 @@ def test_image_drag_resize_and_clear_all(qapp, tmp_path):
     r.clear_all_formatting()
     assert "font-weight:700" not in r.toHtml() and "<img" in r.toHtml()
     r.close()
+
+
+def test_editor_tree_folder_move_rename_delete(qapp, home, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    c = _controller(qapp, home)
+    ed = c.editor
+    root = c.library.root
+    for rel in ("Work/Mail/A.txt", "Work/B.txt", "Notes/N.txt"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(rel, encoding="utf-8")
+    c.rescan(sync=True)
+    c.library.usage.set_favourite("Work/Mail/A.txt", True)
+    c.settings.set("noteit_folder", "Work/Mail")
+    ed.reload_tree()
+    ed.open_template("Work/Mail/A.txt")
+
+    # drop of a folder (what LibraryTree emits) moves it, keeps stats, follows the open template and NoteIT folder
+    ed._tree_dropped("folder", "Work/Mail", "Notes")
+    assert (root / "Notes/Mail/A.txt").exists() and not (root / "Work/Mail").exists()
+    assert c.library.usage.favourite("Notes/Mail/A.txt")
+    assert ed.current.rel == "Notes/Mail/A.txt"
+    assert c.settings.get("noteit_folder") == "Notes/Mail"
+
+    # drop of a template onto the library root
+    ed._tree_dropped("template", "Work/B.txt", "")
+    assert (root / "B.txt").exists() and c.library.get("B.txt")
+
+    # rename with a conflict → "keep both"
+    (root / "Notes/Other").mkdir()
+    monkeypatch.setattr(ed, "_ask_conflict", lambda target: "keep_both")
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: QMessageBox.Ok)
+    ed.move_folder_to("Notes/Mail", "Notes", "Other")
+    assert (root / "Notes/Other (2)/A.txt").exists()
+
+    # the tree refuses to drop a folder into itself
+    from autotemplates.ui.librarytree import LibraryTree
+    assert not LibraryTree.can_drop(("folder", "Notes"), "Notes/Other (2)")
+    assert LibraryTree.can_drop(("folder", "Notes/Other (2)"), "")
+
+    # delete: Recycle Bin refused → asks, "No" keeps everything; "Yes" deletes permanently
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    monkeypatch.setattr(type(ed), "_trash", staticmethod(lambda p: False))
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.No)
+    ed.delete_folder("Notes")
+    assert (root / "Notes").is_dir()
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.Yes)
+    ed.delete_folder("Notes")
+    assert not (root / "Notes").exists()
+    assert ed.current is None
+    assert c.settings.get("noteit_folder") == "Notes"  # back to the default
+    assert not any(t.rel.startswith("Notes/") for t in c.library.templates)

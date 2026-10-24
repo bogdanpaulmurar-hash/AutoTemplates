@@ -33,6 +33,7 @@ DEFAULTS: dict[str, Any] = {
     "picker_show_preview": True,
     "picker_sort": "smart",  # smart (favourites, use count, recent) | name
     "picker_group_categories": False,
+    "stats_keep_days": 30,  # statistics of deleted templates are kept this long (restore from the Recycle Bin)
     "editor_font_family": "Segoe UI",
     "editor_font_size": 11,
     "code_font_family": "Cascadia Mono",

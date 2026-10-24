@@ -144,9 +144,54 @@ class Usage:
         self.save()
 
     def rename(self, old: str, new: str) -> None:
-        if old in self.data:
-            self.data[new] = self.data.pop(old)
+        self.rename_many({old: new})
+
+    def rename_many(self, mapping: dict[str, str]) -> None:
+        """Moved templates keep their statistics (old rel -> new rel)."""
+        changed = False
+        for old, new in mapping.items():
+            if old != new and old in self.data:
+                entry = self.data.pop(old)
+                entry.pop("deleted", None)
+                self.data[new] = entry
+                changed = True
+        if changed:
             self.save()
+
+    def mark_deleted(self, rels, now: float | None = None) -> None:
+        """Deleted templates keep their statistics for a while (restore from the Recycle Bin)."""
+        now = time.time() if now is None else now
+        changed = False
+        for rel in rels:
+            if rel in self.data:
+                self.data[rel]["deleted"] = now
+                changed = True
+        if changed:
+            self.save()
+
+    def purge(self, present, keep_days: int, now: float | None = None) -> int:
+        """Restored templates get their statistics back; others expire after ``keep_days``.
+
+        ``present`` = rels currently in the library. Returns the number of forgotten entries.
+        """
+        now = time.time() if now is None else now
+        present = set(present)
+        removed = 0
+        changed = False
+        for rel in list(self.data):
+            entry = self.data[rel]
+            if "deleted" not in entry:
+                continue
+            if rel in present:
+                entry.pop("deleted")
+                changed = True
+            elif now - float(entry["deleted"]) >= max(0, int(keep_days)) * 86400:
+                del self.data[rel]
+                removed += 1
+                changed = True
+        if changed:
+            self.save()
+        return removed
 
 
 class Library:
@@ -225,8 +270,31 @@ class Library:
         return tpl
 
     def remove(self, rel: str) -> None:
+        self.remove_many([rel])
+
+    def remove_many(self, rels) -> None:
+        gone = set(rels)
         with self._lock:
-            self.templates = [t for t in self.templates if t.rel != rel]
+            self.templates = [t for t in self.templates if t.rel not in gone]
+        self._save_index()
+
+    def apply_moves(self, mapping: dict[str, str]) -> None:
+        """Updates the index after files were moved (old rel -> new rel), without a full scan."""
+        if not mapping:
+            return
+        with self._lock:
+            root = self.root
+            self.templates = [t for t in self.templates if t.rel not in mapping]
+            known = {t.rel for t in self.templates}
+            for new in mapping.values():
+                path = root / new
+                if new in known or not path.is_file():
+                    continue
+                tpl = _read_template(root, path, path.stat())
+                if tpl:
+                    self.templates.append(tpl)
+                    known.add(new)
+            self.templates.sort(key=lambda t: (fold(t.category), fold(t.name)))
         self._save_index()
 
     def get(self, rel: str) -> Template | None:

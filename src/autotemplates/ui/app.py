@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QObject, QPoint, QTimer, QUrl, Signal
@@ -370,7 +371,25 @@ class Controller(QObject):
         else:
             threading.Thread(target=work, name="scan", daemon=True).start()
 
+    @contextmanager
+    def library_operation(self):
+        """Editor move/rename/delete: no rescans while files move, one rescan afterwards."""
+        self._rescan_timer.stop()
+        self.watcher.blockSignals(True)
+        self._scan_lock.acquire()  # waits for a scan already running
+        try:
+            yield
+        finally:
+            self._scan_lock.release()
+            self.watcher.blockSignals(False)
+            self.rescan()
+            self.library_changed()
+
     def _after_scan(self, changed: bool) -> None:
+        try:
+            self.library.usage.purge((t.rel for t in self.library.templates), self.settings.get("stats_keep_days"))
+        except Exception:  # noqa: BLE001
+            log.exception("Could not purge old statistics")
         folders = [str(p) for p in self.library.folders()]
         old = set(self.watcher.directories())
         if old != set(folders):

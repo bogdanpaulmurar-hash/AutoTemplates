@@ -84,7 +84,8 @@ Open it from the tray (double-click), the list (Ctrl+E) or DevPilot.
 - **Per template:** name, category, tags, shortcut, description and insert mode (as in settings / formatted / plain).
 - **New › From clipboard** turns whatever you copied (formatted text, screenshot, code) into a template.
 - Word (`.docx`), RTF and pictures are inserted as they are; *Make an editable copy* converts them to an editor template.
-- Delete moves files to the Recycle Bin.
+- **Library tree:** drag templates and folders onto another folder (or onto empty space for the top level). Right-click a folder: *Rename*, *Move to…*, *Delete*. Nothing is overwritten: a same-name template becomes `Name (2)`; for a same-name folder you choose *Merge* or *Keep both*. Usage statistics and favourites follow the moved templates.
+- Delete moves templates and folders to the Recycle Bin (if the bin refuses, e.g. on a cloud drive, you are asked before a permanent delete). Statistics of deleted templates are kept for a number of days (Settings › Insertion), so a restore brings them back.
 
 Formatting shortcuts (template editor and NoteIT):
 

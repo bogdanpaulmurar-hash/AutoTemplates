@@ -12,19 +12,21 @@ from PySide6.QtGui import (QAction, QActionGroup, QColor, QDesktopServices, QFon
 from PySide6.QtWidgets import (QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFontComboBox,
                                QFormLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu,
                                QMessageBox, QPushButton, QSpinBox, QSplitter, QStackedWidget, QTextBrowser, QToolBar,
-                               QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+                               QToolButton, QTreeWidgetItem, QVBoxLayout, QWidget)
 
-from autotemplates.core import formats, highlight
+from autotemplates.core import folders, formats, highlight
+from autotemplates.core.folders import ASK, KEEP_BOTH, MERGE, FolderConflict, FolderError, TrashFailed
 from autotemplates.core.library import Template, fold, safe_name, unique_path
+from autotemplates.core.settings import DEFAULTS
 from autotemplates.i18n import t
 from autotemplates.ui import theme
 from autotemplates.ui.codeedit import CodeEdit
+from autotemplates.ui.librarytree import ROLE_CAT, ROLE_REL, LibraryTree
 from autotemplates.ui.content import absolutize_images
 from autotemplates.ui.richedit import RichEdit, load_document, localize_images, with_shortcut
 
 log = logging.getLogger(__name__)
 
-ROLE_REL = Qt.UserRole + 1
 PRESET_COLORS = ["#000000", "#5f6368", "#c62828", "#e65100", "#f9a825", "#2e7d32", "#00838f", "#1565c0",
                  "#6a1b9a", "#ad1457", "#ffffff"]
 HIGHLIGHTS = ["#fff59d", "#c5e1a5", "#80deea", "#90caf9", "#f48fb1", "#ffcc80", "#e0e0e0"]
@@ -112,12 +114,13 @@ class EditorWindow(QMainWindow):
         self.new_btn.setMenu(self._new_menu())
         top.addWidget(self.new_btn)
         ll.addLayout(top)
-        self.tree = QTreeWidget()
+        self.tree = LibraryTree()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(14)
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._tree_menu)
         self.tree.currentItemChanged.connect(self._tree_selected)
+        self.tree.dropped.connect(self._tree_dropped)
         ll.addWidget(self.tree, 1)
         folder_btn = QPushButton(theme.glyph_icon("folder"), t("editor.open_folder"))
         folder_btn.clicked.connect(self.c.open_library_folder)
@@ -477,6 +480,7 @@ class EditorWindow(QMainWindow):
     def reload_tree(self) -> None:
         keep = self.current.rel if self.current else None
         query = fold(self.filter.text())
+        self.tree.drag_allowed = not query  # moving inside a filtered view would be confusing
         self.tree.blockSignals(True)
         self.tree.clear()
         lib = self.c.library
@@ -492,7 +496,7 @@ class EditorWindow(QMainWindow):
             item = QTreeWidgetItem([leaf])
             item.setIcon(0, theme.glyph_icon("folder"))
             item.setData(0, ROLE_REL, None)
-            item.setData(0, Qt.UserRole + 2, cat)
+            item.setData(0, ROLE_CAT, cat)
             (parent.addChild(item) if parent else self.tree.addTopLevelItem(item))
             item.setExpanded(True)
             folders[cat] = item
@@ -563,11 +567,16 @@ class EditorWindow(QMainWindow):
             menu.addSeparator()
             menu.addAction(theme.glyph_icon("delete"), t("tree.delete"), lambda: self.delete_template(rel))
         else:
-            cat = item.data(0, Qt.UserRole + 2) if item else ""
+            cat = item.data(0, ROLE_CAT) if item else ""
             menu.addAction(theme.glyph_icon("new"), t("new.rich"), lambda: self.new_template("rich", category=cat))
             menu.addAction(theme.glyph_icon("folder"), t("new.category"), lambda: self.new_category(cat))
             if cat:
                 menu.addAction(theme.glyph_icon("folder"), t("tree.reveal"), lambda: self.c.reveal(self.c.library.root / cat))
+                menu.addSeparator()
+                menu.addAction(theme.glyph_icon("rename"), t("folder.rename"), lambda: self.rename_folder(cat))
+                menu.addAction(theme.glyph_icon("folder"), t("folder.move"), lambda: self.move_folder(cat))
+                menu.addSeparator()
+                menu.addAction(theme.glyph_icon("delete"), t("folder.delete"), lambda: self.delete_folder(cat))
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _toggle_fav(self, rel: str) -> None:
@@ -811,14 +820,19 @@ class EditorWindow(QMainWindow):
             self.save()
 
     def move_template(self, rel: str) -> None:
-        if self.current is None or self.current.rel != rel:
-            self.open_template(rel)
-        cat, ok = QInputDialog.getItem(self, t("tree.move"), t("editor.category"), [""] + self._all_categories(),
-                                       editable=True)
-        if ok:
-            self.category.setEditText(cat)
-            self._set_dirty(True)
-            self.save()
+        tpl = self.c.library.get(rel)
+        if not tpl:
+            return
+        cat = self._pick_folder(t("tree.move"), tpl.category, [""] + self._all_categories())
+        if cat is not None:
+            self.move_template_to(rel, cat)
+
+    def move_template_to(self, rel: str, dest: str) -> None:
+        if self.current and self.current.rel == rel:
+            if not self.maybe_save():
+                return
+            rel = self.current.rel if self.current else rel  # saving may have renamed it
+        self._run(lambda: folders.move_template(self.c.library, rel, dest))
 
     def duplicate_template(self, rel: str) -> None:
         tpl = self.c.library.get(rel)
@@ -842,20 +856,130 @@ class EditorWindow(QMainWindow):
             return
         if QMessageBox.question(self, "AutoTemplates", t("tree.delete_confirm", name=tpl.name)) != QMessageBox.Yes:
             return
-        path = tpl.path(self.c.library.root)
-        for p in (path, path.with_suffix(".assets")):
-            if p.exists() and not QFile.moveToTrash(str(p)):
-                if p.is_dir():
-                    shutil.rmtree(p, ignore_errors=True)
-                else:
-                    p.unlink(missing_ok=True)
-        self.c.library.remove(rel)
-        if self.current and self.current.rel == rel:
-            self.current = None
-            self._set_dirty(False)
-            self._show_page(None)
+        self._delete(lambda permanent: folders.delete_template(self.c.library, rel, self._trash, permanent=permanent),
+                     tpl.name)
+
+    # ================================================================ folder ops
+    def rename_folder(self, cat: str) -> None:
+        name, ok = QInputDialog.getText(self, t("folder.rename"), t("new.category_name"), text=folders.leaf_of(cat))
+        if ok and name.strip() and name.strip() != folders.leaf_of(cat):
+            self.move_folder_to(cat, folders.parent_of(cat), name.strip())
+
+    def move_folder(self, cat: str) -> None:
+        choices = [""] + [c for c in self._all_categories() if not folders.is_inside(c, cat)]
+        dest = self._pick_folder(t("folder.move_to", name=folders.leaf_of(cat)), folders.parent_of(cat), choices)
+        if dest is not None:
+            self.move_folder_to(cat, dest)
+
+    def move_folder_to(self, cat: str, dest_parent: str, new_name: str | None = None) -> None:
+        if self.current and folders.is_inside(self.current.category, cat) and not self.maybe_save():
+            return
+        policy = ASK
+        while True:
+            try:
+                self._run(lambda: folders.move_folder(self.c.library, cat, dest_parent, new_name=new_name,
+                                                      conflict=policy), old_cat=cat)
+                return
+            except FolderConflict as conflict:
+                policy = self._ask_conflict(conflict.target)
+                if policy is None:
+                    return
+
+    def delete_folder(self, cat: str) -> None:
+        n_templates, n_folders = folders.folder_counts(self.c.library.root, cat)
+        text = t("folder.delete_confirm", name=folders.leaf_of(cat), templates=n_templates, folders=n_folders)
+        if QMessageBox.question(self, "AutoTemplates", text) != QMessageBox.Yes:
+            return
+        self._delete(lambda permanent: folders.delete_folder(self.c.library, cat, self._trash, permanent=permanent),
+                     folders.leaf_of(cat), old_cat=cat)
+
+    def _tree_dropped(self, kind: str, value: str, target: str) -> None:
+        if kind == "template":
+            self.move_template_to(value, target)
+        else:
+            self.move_folder_to(value, target)
+
+    # ---------------------------------------------------------------- helpers
+    @staticmethod
+    def _trash(path: Path) -> bool:
+        result = QFile.moveToTrash(str(path))
+        ok = result[0] if isinstance(result, tuple) else bool(result)  # PySide may return (ok, path_in_trash)
+        return bool(ok) and not path.exists()
+
+    def _pick_folder(self, title: str, current: str, choices: list[str]) -> str | None:
+        """Folder chooser; the library root is shown as a label, a typed new path is allowed."""
+        root_label = t("folder.root")
+        labels = [c or root_label for c in choices]
+        idx = choices.index(current) if current in choices else 0
+        value, ok = QInputDialog.getItem(self, title, t("editor.category"), labels, idx, editable=True)
+        if not ok:
+            return None
+        return "" if value.strip() in ("", root_label) else value.strip()
+
+    def _ask_conflict(self, target: str) -> str | None:
+        box = QMessageBox(QMessageBox.Question, "AutoTemplates", t("folder.conflict", name=target), parent=self)
+        merge = box.addButton(t("folder.merge"), QMessageBox.AcceptRole)
+        both = box.addButton(t("folder.keep_both"), QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(both)
+        box.exec()
+        return {merge: MERGE, both: KEEP_BOTH}.get(box.clickedButton())
+
+    def _delete(self, op, name: str, *, old_cat: str | None = None) -> None:
+        try:
+            self._run(lambda: op(False), old_cat=old_cat, deleted=True)
+        except TrashFailed:
+            answer = QMessageBox.warning(self, "AutoTemplates", t("folder.trash_failed", name=name),
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if answer == QMessageBox.Yes:
+                self._run(lambda: op(True), old_cat=old_cat, deleted=True)
+
+    def _run(self, op, *, old_cat: str | None = None, deleted: bool = False):
+        """Runs a file operation with the watcher paused; FolderConflict/TrashFailed go to the caller."""
+        try:
+            with self.c.library_operation():
+                result = op()
+        except (FolderConflict, TrashFailed):
+            raise
+        except FolderError as exc:
+            QMessageBox.warning(self, "AutoTemplates", t(exc.key, **exc.kwargs))
+            return None
+        except OSError as exc:
+            log.exception("Library operation failed")
+            QMessageBox.critical(self, "AutoTemplates", t("folder.failed", error=str(exc)))
+            self.reload_tree()
+            return None
+        self._after_operation(result, old_cat, deleted)
+        return result
+
+    def _after_operation(self, result: folders.Result, old_cat: str | None, deleted: bool) -> None:
+        settings = self.c.settings
+        note_folder = settings.get("noteit_folder") or ""
+        if old_cat and deleted:
+            if folders.is_inside(note_folder, old_cat):
+                settings.set("noteit_folder", DEFAULTS["noteit_folder"])
+        elif old_cat and result.folder and result.folder != old_cat:
+            new_note_folder = folders.remap_category(note_folder, old_cat, result.folder)
+            if new_note_folder != note_folder:
+                settings.set("noteit_folder", new_note_folder)
+        if self._new_path is not None and old_cat and result.folder and not deleted:
+            self.category.setEditText(folders.remap_category(self.category.currentText().strip(), old_cat, result.folder))
+        if self.current is not None:
+            new_rel = result.moved.get(self.current.rel)
+            if new_rel:
+                self.reload_tree()
+                self.open_template(new_rel)
+            elif self.current.rel in result.deleted:
+                self.current = None
+                self._set_dirty(False)
+                self._show_page(None)
+        self.c.renderer.clear()
         self.reload_tree()
-        self.c.library_changed()
+        if result.renamed:
+            items = "\n".join(f"{old} → {new}" for old, new in result.renamed)
+            QMessageBox.information(self, "AutoTemplates", t("folder.renamed", items=items))
+        if result.moved or result.folder:
+            self.status.setText(t("folder.done"))
 
     def convert_to_rich(self) -> None:
         """docx / rtf / image → an editable copy (.html) next to the original."""

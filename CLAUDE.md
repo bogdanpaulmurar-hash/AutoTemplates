@@ -10,7 +10,7 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 - Design: `docs/ARCHITECTURE.md` — read it before structural changes
 
 ## Map (`src/autotemplates/`)
-`core` (library, index, variables, conversion, NoteIT export — no Qt) · `ui` (picker, launcher, NoteIT, editor, settings, tray) · `platform` (Win32: hotkey, caret position, paste, clipboard; `office.py` Outlook/OneNote COM) · `i18n.py` · `instance.py` (single instance + named pipe) · `samples.py`
+`core` (library, index, folder ops, variables, conversion, NoteIT export — no Qt) · `ui` (picker, launcher, NoteIT, editor, settings, tray) · `platform` (Win32: hotkey, caret position, paste, clipboard; `office.py` Outlook/OneNote COM) · `i18n.py` · `instance.py` (single instance + named pipe) · `samples.py`
 
 ## Rules
 - No `.exe`: Python, `pythonw`, tray, start with Windows, own icon. Must not interfere with the other Python apps running in parallel.
@@ -21,6 +21,7 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 - DevPilot: `devpilot.tool.json`; respect `DEVPILOT_MANAGED` / `DEVPILOT_SUPPRESS` (`tray`, `autostart`).
 - UI in Romanian + English; code, comments, commits and technical docs in English; updates to the user in Romanian, short.
 - Visible docs: never the employer's name, company e-mails, internal IDs or numbers.
+- Tree operations never overwrite files and always update index + usage in the same step (`core/folders.py`).
 - Office integration only through COM with a fallback (`OfficeUnavailable`); never send mail automatically.
 - Status 0.3.0: hotkey, paste, clipboard and the Outlook/OneNote COM calls not yet tested on Windows — verify there before building on them.
 

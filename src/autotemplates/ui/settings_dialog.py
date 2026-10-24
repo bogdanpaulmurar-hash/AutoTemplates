@@ -139,6 +139,12 @@ class SettingsDialog(QDialog):
             self.sort.setCurrentIndex(idx)
         inf.addRow(t("settings.sort"), self.sort)
 
+        self.stats_days = QSpinBox()
+        self.stats_days.setRange(0, 3650)
+        self.stats_days.setValue(int(s.get("stats_keep_days")))
+        self.stats_days.setToolTip(t("settings.stats_keep_days_tip"))
+        inf.addRow(t("settings.stats_keep_days"), self.stats_days)
+
         dim = QHBoxLayout()
         self.pw = QSpinBox()
         self.pw.setRange(400, 2000)
@@ -263,6 +269,7 @@ class SettingsDialog(QDialog):
             "restore_delay_ms": self.restore_delay.value(),
             "picker_show_preview": self.preview.isChecked(),
             "picker_sort": self.sort.currentData(),
+            "stats_keep_days": self.stats_days.value(),
             "picker_width": self.pw.value(),
             "picker_height": self.ph.value(),
             "editor_font_family": self.ed_font.currentFont().family(),
