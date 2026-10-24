@@ -111,6 +111,15 @@ Title, formatted text and screenshots, then:
 
 Closing the window keeps a draft. **Last note** brings back the previously finished note.
 
+### Backup
+
+Settings → **Backup**: a zip with the settings, the usage statistics and favourites, and the NoteIT drafts (with
+their pictures); the templates only if you tick it (the library folder is usually synced already).
+Default folder `Documents\AutoTemplates Backups`, automatic backup **daily** (at most one a day), the newest
+**10** kept. *Back up now* is also in the tray menu. *Restore…* shows what the backup holds and what would change,
+makes a safety backup first, keeps this computer's paths, merges the statistics and never overwrites a template
+(different ones come back as `Name (2)`).
+
 ## Library folder
 
 Default `Documents\AutoTemplates` (change it in Settings). Supported files:
@@ -152,7 +161,7 @@ combination in Settings if needed (for example `Ctrl+Alt+Q`); the settings show 
 
 ```
 python -m autotemplates [gui] [--autostart]
-python -m autotemplates action picker|new|new_clipboard|editor|settings|folder|reload|quit [--no-start]
+python -m autotemplates action picker|new|new_clipboard|editor|settings|folder|reload|backup|quit [--no-start]
 python -m autotemplates setup [--start-menu] [--autostart on|off] [--remove]
 python -m autotemplates version
 python -m autotemplates --self-test

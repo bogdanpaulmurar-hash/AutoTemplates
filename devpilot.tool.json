@@ -64,6 +64,13 @@
       "section": "Files"
     },
     {
+      "label": "Back up now",
+      "glyph": "E74E",
+      "kind": "Arguments",
+      "arguments": "action backup",
+      "section": "Files"
+    },
+    {
       "label": "Settings",
       "glyph": "E713",
       "kind": "Arguments",

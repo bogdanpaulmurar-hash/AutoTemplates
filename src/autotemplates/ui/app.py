@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFormLay
                                QSystemTrayIcon)
 
 from autotemplates import __version__, i18n
+from autotemplates.core import backup as bk
 from autotemplates.core import variables as tv
 from autotemplates.core.library import Library
 from autotemplates.core.paths import AppPaths
@@ -26,7 +28,7 @@ from autotemplates.ui.inserter import Inserter
 
 log = logging.getLogger(__name__)
 
-ACTIONS = ("picker", "new", "new_clipboard", "editor", "settings", "folder", "reload", "quit", "show", "noteit")
+ACTIONS = ("picker", "new", "new_clipboard", "editor", "settings", "folder", "reload", "quit", "show", "noteit", "backup")
 
 
 def caret_to_logical(x: int, y: int) -> QPoint:
@@ -69,6 +71,7 @@ class Controller(QObject):
     hotkey_fired = Signal(int, object)  # target hwnd, caret (x, y, h) or None
     remote_action = Signal(dict)
     scanned = Signal(bool)
+    backup_finished = Signal(str, str, bool)  # zip path ("" on failure), error, automatic
 
     def __init__(self, qt_app: QApplication, paths: AppPaths, settings: Settings) -> None:
         super().__init__()
@@ -88,10 +91,15 @@ class Controller(QObject):
         self._launch_origin: tuple[int, object] = (0, None)
         self._hotkey_ok = False
         self._scan_lock = threading.Lock()
+        self._backup_lock = threading.Lock()
+        self._auto_backup_warned = False
 
         self.hotkey_fired.connect(self._on_hotkey)
         self.remote_action.connect(self.run_action)
         self.scanned.connect(self._after_scan)
+        self.backup_finished.connect(self._after_backup)
+        self._backup_timer = QTimer(self, interval=60 * 60 * 1000)  # daily mode: also checked every hour
+        self._backup_timer.timeout.connect(lambda: self.check_auto_backup(startup=False))
         self.listener = HotkeyListener(self._hotkey_thread)
         self.watcher = QFileSystemWatcher(self)
         self._rescan_timer = QTimer(self, singleShot=True, interval=500)
@@ -110,6 +118,8 @@ class Controller(QObject):
         else:
             log.info("Started by DevPilot: no tray icon (DevPilot shows AutoTemplates' actions)")
         QTimer.singleShot(300, lambda: self.picker)  # build the list while idle: first Ctrl+Q is instant
+        QTimer.singleShot(8000, lambda: self.check_auto_backup(startup=True))  # after the start-up work
+        self._backup_timer.start()
 
     def shutdown(self) -> None:
         self.listener.stop()
@@ -422,6 +432,84 @@ class Controller(QObject):
         else:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path if path.is_dir() else path.parent)))
 
+    # ================================================================ backup
+    def backup_source(self) -> bk.BackupSource:
+        return bk.BackupSource(self.paths.data_dir, self.library.root)
+
+    def _flush_noteit(self) -> None:
+        """The NoteIT draft on disk must be current before it is backed up."""
+        if self._noteit is not None:
+            try:
+                self._noteit._write_draft()
+            except Exception:  # noqa: BLE001
+                log.exception("Could not save the NoteIT draft before the backup")
+
+    def check_auto_backup(self, startup: bool) -> None:
+        mode = self.settings.get("backup_auto")
+        if bk.is_due(mode, float(self.settings.get("backup_last") or 0), startup=startup):
+            self.backup_now(automatic=True)
+
+    def backup_now(self, *, folder: Path | None = None, include_templates: bool | None = None,
+                   keep: int | None = None, automatic: bool = False) -> bool:
+        """Writes a backup in the background; False when one is already running."""
+        if not self._backup_lock.acquire(blocking=False):
+            return False
+        self._flush_noteit()
+        dest = Path(folder) if folder else self.settings.backup_dir
+        include = self.settings.get("backup_include_templates") if include_templates is None else include_templates
+        keep = int(self.settings.get("backup_keep") if keep is None else keep)
+        src = self.backup_source()
+
+        def work() -> None:
+            try:
+                path = bk.create_backup(src, dest, include_templates=bool(include))
+                bk.rotate(dest, keep)
+                self.backup_finished.emit(str(path), "", automatic)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("Backup failed (%s)", dest)
+                self.backup_finished.emit("", str(exc), automatic)
+            finally:
+                self._backup_lock.release()
+
+        if not automatic:
+            self.notify(t("backup.running"))
+        threading.Thread(target=work, name="backup", daemon=True).start()
+        return True
+
+    def _after_backup(self, path: str, error: str, automatic: bool) -> None:
+        if path:
+            self.settings.set("backup_last", time.time())
+            self._auto_backup_warned = False
+            if not automatic:
+                self.notify(t("backup.done", name=Path(path).name))
+        elif not automatic or not self._auto_backup_warned:
+            self._auto_backup_warned = automatic
+            self.notify(t("backup.failed", error=error))
+
+    def restore_backup(self, info: bk.BackupInfo, options: bk.RestoreOptions) -> tuple[bk.RestoreResult, Path]:
+        """Safety backup of the current state first, then the restore. Raises BackupError/OSError."""
+        with self._backup_lock:  # waits for a backup that is running
+            return self._restore_locked(info, options)
+
+    def _restore_locked(self, info: bk.BackupInfo, options: bk.RestoreOptions) -> tuple[bk.RestoreResult, Path]:
+        self._flush_noteit()
+        src = self.backup_source()
+        try:
+            safety = bk.create_backup(src, self.settings.backup_dir, include_templates=options.templates,
+                                      tag=bk.SAFETY_TAG)
+        except OSError:
+            log.warning("Backup folder not writable; safety backup goes to the data folder")
+            safety = bk.create_backup(src, self.paths.data_dir / "backups", include_templates=options.templates,
+                                      tag=bk.SAFETY_TAG)
+        with self.library_operation():
+            result = bk.restore_backup(info, options, settings=self.settings, usage=self.library.usage,
+                                       noteit_dir=self.paths.noteit_dir, cache_dir=self.paths.cache_dir)
+        if self._noteit is not None and result.noteit:
+            self._noteit._finished = False
+            self._noteit._load_draft()
+        log.info("Backup restored from %s (safety copy %s)", info.path, safety)
+        return result, safety
+
     # ================================================================ tray / commands
     def _create_tray(self) -> None:
         tray = QSystemTrayIcon(theme.app_icon(), self)
@@ -430,7 +518,8 @@ class Controller(QObject):
         for label, icon, action in (("tray.insert", "insert", "picker"), ("tray.noteit", "note", "noteit"), ("tray.new", "new", "new"),
                                     ("tray.new_clipboard", "copy", "new_clipboard"), ("tray.editor", "edit", "editor"),
                                     (None, None, None), ("tray.folder", "folder", "folder"),
-                                    ("tray.reload", "refresh", "reload"), ("tray.settings", "settings", "settings"),
+                                    ("tray.reload", "refresh", "reload"), ("tray.backup", "save", "backup"),
+                                    ("tray.settings", "settings", "settings"),
                                     (None, None, None), ("tray.quit", "delete", "quit")):
             if label is None:
                 menu.addSeparator()
@@ -480,6 +569,8 @@ class Controller(QObject):
             self.open_library_folder()
         elif action == "reload":
             self.rescan()
+        elif action == "backup":
+            self.backup_now()
         elif action == "quit":
             if self._editor is None or self._editor.maybe_save():
                 self.qt_app.quit()

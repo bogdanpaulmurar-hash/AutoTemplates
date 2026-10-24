@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autotemplates"
-version = "0.3.1"
+version = "0.3.2"
 description = "Small, fast template inserter for Windows: rich text, screenshots and highlighted code at the cursor, on a hotkey."
 readme = "README.md"
 requires-python = ">=3.10"

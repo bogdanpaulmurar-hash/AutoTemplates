@@ -17,6 +17,7 @@ src/autotemplates/
     variables.py       {date} {time} {clipboard} {input:…} {cursor} …
     highlight.py       language detection + inline-styled Pygments HTML
     noteit_export.py   NoteIT: Outlook HTML with cid: pictures, OneNote page XML, OneNote hierarchy parsing
+    backup.py          backup zip (manifest + settings, usage, NoteIT drafts, optional library), rotation, restore
   platform/
     hotkey.py          RegisterHotKey on its own thread; "Ctrl+Q" parsing
     win32.py           foreground window, caret position, focused control, focus, SendInput (Ctrl+V, ←)
@@ -80,6 +81,23 @@ for other apps. Both carry the original bytes: pictures are never recompressed o
   Fallback: `mailto:` with plain text.
 - OneNote: desktop OneNote COM (`GetHierarchy` → section picker, `CreateNewPage`, `UpdatePageContent` with HTMLBlocks
   and base64 pictures, schema 2013). The Store/"for Windows 10" app has no COM → fallback: clipboard + `onenote:`.
+
+## Backup and restore (`core/backup.py`)
+
+- One zip per backup, `AutoTemplates-backup-YYYYMMDD-HHMMSS[-tag].zip`, written as a hidden `.tmp` and renamed.
+  `manifest.json` holds the format version (`FORMAT_VERSION`), app version, date, computer, library path and contents.
+- Contents: `settings.json`, `usage.json`, NoteIT `draft.json`/`last.json` and the pictures they link to
+  (`data/images`, original bytes, links recorded in `manifest.noteit_images`); the library only when
+  `backup_include_templates` is on. `index.json` is a cache and is never included.
+- Settings: `backup_dir`, `backup_auto` (off | startup | daily), `backup_keep` (rotation only touches files named like
+  backups), `backup_include_templates`, `backup_last`. The controller checks 8 s after start and hourly; the zip is
+  written on a background thread (`backup_finished` signal).
+- Restore: preview (`RestoreDialog`), safety backup (`-before-restore`) first, then inside `library_operation()`.
+  `LOCAL_KEYS` (library folder, backup folder, autostart, NoteIT last folder, OneNote section) stay local; values
+  of the wrong type are ignored. Usage is merged (max count, latest use, favourite if either) or replaced.
+  Templates never overwrite: identical ones are skipped, different ones become `Name (2)` with their `.assets`
+  renamed and the `<img src>` rewritten. NoteIT picture links are rewritten to this computer's cache.
+  Backups from a newer format and zips with unsafe paths are refused.
 
 ## Performance
 

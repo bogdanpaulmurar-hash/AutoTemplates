@@ -10,7 +10,7 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 - Design: `docs/ARCHITECTURE.md` — read it before structural changes
 
 ## Map (`src/autotemplates/`)
-`core` (library, index, folder ops, variables, conversion incl. `docx_html`, clipboard HTML `clipboard_html`, NoteIT export — no Qt) · `ui` (picker, launcher, NoteIT, editor, settings, tray) · `platform` (Win32: hotkey, caret position, paste, clipboard; `office.py` Outlook/OneNote COM) · `i18n.py` · `instance.py` (single instance + named pipe) · `samples.py`
+`core` (library, index, folder ops, variables, conversion incl. `docx_html`, clipboard HTML `clipboard_html`, NoteIT export, `backup` — no Qt) · `ui` (picker, launcher, NoteIT, editor, settings, tray) · `platform` (Win32: hotkey, caret position, paste, clipboard; `office.py` Outlook/OneNote COM) · `i18n.py` · `instance.py` (single instance + named pipe) · `samples.py`
 
 ## Rules
 - No `.exe`: Python, `pythonw`, tray, start with Windows, own icon. Must not interfere with the other Python apps running in parallel.
@@ -24,7 +24,8 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 - Tree operations never overwrite files and always update index + usage in the same step (`core/folders.py`).
 - Office integration only through COM with a fallback (`OfficeUnavailable`); never send mail automatically.
 - Clipboard HTML goes through `core/clipboard_html.py` (styles inline inside the fragment). Pictures are never recompressed or scaled.
-- Status 0.3.1: hotkey, paste, clipboard, the Outlook/OneNote COM calls and the Word/Outlook COM paste not yet tested on Windows — verify there before building on them.
+- Backups (`core/backup.py`): restore never overwrites templates and never takes machine-specific settings (`LOCAL_KEYS`); bump `FORMAT_VERSION` when the zip layout changes.
+- Status 0.3.2: hotkey, paste, clipboard, the Office COM calls, the COM paste and backup/restore not yet tested on Windows — verify there before building on them.
 
 ## Shared context
 Project overview and open bugs/changes live in two Google Docs: **PROIECTE_CONTEXT (live)** and **MODIFICARI_PROIECTE (live)** — read only the AutoTemplates section. Remove items from MODIFICARI once implemented and confirmed.

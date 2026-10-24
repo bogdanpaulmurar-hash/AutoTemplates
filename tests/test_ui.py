@@ -511,3 +511,40 @@ def test_insert_mode_template_setting_and_shift(qapp, home):
     c.settings.set("insert_mode", "plain")
     assert c._plain("Implicit.html", False) and not c._plain("Implicit.html", True)
     assert not c._plain("Bogat.html", False) and c._plain("Bogat.html", True)
+
+
+def test_backup_tab_restore_dialog_and_controller_restore(qapp, home, tmp_path):
+    from autotemplates.core import backup as bk
+    from autotemplates.ui.backup_dialog import RestoreDialog
+    from autotemplates.ui.settings_dialog import SettingsDialog
+
+    c = _controller(qapp, home)
+    c.settings.set("backup_dir", str(tmp_path / "bk"))
+    rel = c.library.templates[0].rel
+    c.library.usage.set_favourite(rel, True)
+    note = c.noteit
+    note.title_edit.setText("Backup draft")
+    note.editor.insertPlainText("keep me")
+    note._write_draft()
+
+    dlg = SettingsDialog(c)
+    assert dlg.backup_auto.currentData() == "daily" and dlg.backup_keep.value() == 10
+    assert not dlg.backup_templates.isChecked()
+    dlg.reject()
+
+    zpath = bk.create_backup(c.backup_source(), tmp_path / "bk")
+    c.settings.set("theme", "light")
+    c.library.usage.set_favourite(rel, False)
+    note.title_edit.setText("Other")
+    note._write_draft()
+
+    info = bk.read_backup(zpath)
+    rd = RestoreDialog(c, info)
+    assert rd.cb_settings.isChecked() and rd.cb_usage.isChecked() and rd.cb_noteit.isChecked()
+    assert not rd.cb_templates.isEnabled() and rd.library_choice is None
+    result, safety = c.restore_backup(info, rd.options())
+    assert safety.exists() and bk.SAFETY_TAG in safety.name
+    assert c.settings.get("theme") == "dark"
+    assert c.library.usage.favourite(rel)
+    assert note.title_edit.text() == "Backup draft"
+    assert "theme" in result.settings_changed

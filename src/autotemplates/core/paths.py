@@ -34,6 +34,13 @@ def default_library_dir() -> Path:
     return Path.home() / "Documents" / "AutoTemplates"
 
 
+def default_backup_dir() -> Path:
+    override = os.environ.get("AUTOTEMPLATES_HOME")
+    if override:
+        return Path(override) / "Backups"
+    return Path.home() / "Documents" / "AutoTemplates Backups"
+
+
 @dataclass(frozen=True)
 class AppPaths:
     data_dir: Path
@@ -49,6 +56,14 @@ class AppPaths:
     @property
     def usage_file(self) -> Path:
         return self.data_dir / "usage.json"
+
+    @property
+    def noteit_dir(self) -> Path:
+        return self.data_dir / "noteit"
+
+    @property
+    def cache_dir(self) -> Path:
+        return self.data_dir / "cache"
 
     @property
     def log_file(self) -> Path:

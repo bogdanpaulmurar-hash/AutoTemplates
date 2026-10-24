@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QFont, QKeySequence
+import os
+from datetime import datetime
+from pathlib import Path
+
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialog,
                                QDialogButtonBox, QFileDialog, QFontComboBox,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QPushButton, QSpinBox, QTabWidget,
-                               QVBoxLayout, QWidget)
+                               QLineEdit, QMessageBox, QPushButton, QSpinBox,
+                               QTabWidget, QVBoxLayout, QWidget)
 
 from autotemplates import __version__
 from autotemplates.core import highlight
+from autotemplates.core.paths import default_backup_dir
 from autotemplates.i18n import t
 from autotemplates.platform import devpilot
 from autotemplates.platform.hotkey import Hotkey
@@ -217,10 +222,54 @@ class SettingsDialog(QDialog):
         ef.addRow(t("settings.code_bg"), r3)
         tabs.addTab(e, t("settings.editor"))
 
+        # ------------------------------------------------------------ Backup
+        b = QWidget()
+        bf = QFormLayout(b)
+        what = QLabel(t("backup.what"))
+        what.setWordWrap(True)
+        bf.addRow(what)
+        self.backup_dir = QLineEdit(str(s.backup_dir))
+        browse_b = QPushButton(t("settings.browse"))
+        browse_b.clicked.connect(self._browse_backup)
+        rb = QHBoxLayout()
+        rb.addWidget(self.backup_dir, 1)
+        rb.addWidget(browse_b)
+        bf.addRow(t("backup.folder"), rb)
+        self.backup_auto = QComboBox()
+        for key in ("off", "startup", "daily"):
+            self.backup_auto.addItem(t(f"backup.auto_{key}"), key)
+        self.backup_auto.setCurrentIndex(max(0, self.backup_auto.findData(s.get("backup_auto"))))
+        bf.addRow(t("backup.auto"), self.backup_auto)
+        self.backup_keep = QSpinBox()
+        self.backup_keep.setRange(1, 200)
+        self.backup_keep.setValue(int(s.get("backup_keep")))
+        self.backup_keep.setToolTip(t("backup.keep_tip"))
+        bf.addRow(t("backup.keep"), self.backup_keep)
+        self.backup_templates = QCheckBox(t("backup.include_templates"))
+        self.backup_templates.setChecked(bool(s.get("backup_include_templates")))
+        self.backup_templates.setToolTip(t("backup.include_tip"))
+        bf.addRow("", self.backup_templates)
+        self.backup_state = QLabel()
+        self.backup_state.setObjectName("Hint")
+        self.backup_state.setWordWrap(True)
+        bf.addRow("", self.backup_state)
+        self._show_last_backup()
+        rbtn = QHBoxLayout()
+        for label, slot in (("backup.now", self._backup_now), ("backup.restore", self._restore),
+                            ("backup.open_folder", self._open_backup_folder)):
+            btn = QPushButton(t(label))
+            btn.clicked.connect(slot)
+            rbtn.addWidget(btn)
+        rbtn.addStretch(1)
+        bf.addRow(rbtn)
+        controller.backup_finished.connect(self._backup_finished)
+        self.finished.connect(lambda _=0: self._disconnect_backup())
+        tabs.addTab(b, t("settings.backup"))
+
         # ------------------------------------------------------ Version & About
         about_box = QGroupBox("Despre AutoTemplates")
         about_lay = QVBoxLayout(about_box)
-        ver_lbl = QLabel(f"<b>AutoTemplates v{__version__}</b> (cu NoteIT, Quick Launcher & [P3] Category View)")
+        ver_lbl = QLabel(f"<b>AutoTemplates v{__version__}</b> (cu NoteIT, Quick Launcher & Backup)")
         ver_lbl.setStyleSheet("font-size: 10pt; color: #5b6cff;")
         about_lay.addWidget(ver_lbl)
 
@@ -241,6 +290,86 @@ class SettingsDialog(QDialog):
         folder = QFileDialog.getExistingDirectory(self, t("settings.library"), self.library.text())
         if folder:
             self.library.setText(folder)
+
+    # ---------------------------------------------------------------- backup
+    def _backup_folder(self) -> Path:
+        text = self.backup_dir.text().strip()
+        return Path(os.path.expandvars(os.path.expanduser(text))) if text else default_backup_dir()
+
+    def _browse_backup(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, t("backup.folder"), self.backup_dir.text())
+        if folder:
+            self.backup_dir.setText(folder)
+
+    def _show_last_backup(self) -> None:
+        last = float(self.c.settings.get("backup_last") or 0)
+        when = datetime.fromtimestamp(last).strftime("%d.%m.%Y %H:%M") if last else t("backup.never")
+        self.backup_state.setText(t("backup.last", when=when))
+
+    def _backup_now(self) -> None:
+        if self.c.backup_now(folder=self._backup_folder(), include_templates=self.backup_templates.isChecked(),
+                             keep=self.backup_keep.value()):
+            self.backup_state.setText(t("backup.running"))
+
+    def _backup_finished(self, path: str, error: str, automatic: bool) -> None:
+        try:
+            if path:
+                self._show_last_backup()
+                self.backup_state.setText(self.backup_state.text() + " · " + Path(path).name)
+            else:
+                self.backup_state.setText(t("backup.failed", error=error))
+        except RuntimeError:  # dialog already closed
+            pass
+
+    def _disconnect_backup(self) -> None:
+        try:
+            self.c.backup_finished.disconnect(self._backup_finished)
+        except (RuntimeError, TypeError):
+            pass
+
+    def _open_backup_folder(self) -> None:
+        folder = self._backup_folder()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self.backup_state.setText(t("backup.failed", error=str(exc)))
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def _restore(self) -> None:
+        from autotemplates.core import backup as bk
+        from autotemplates.ui.backup_dialog import RestoreDialog
+
+        start = self._backup_folder()
+        path, _ = QFileDialog.getOpenFileName(self, t("backup.choose_file"), str(start if start.is_dir() else Path.home()),
+                                              t("backup.zip_filter"))
+        if not path:
+            return
+        try:
+            info = bk.read_backup(Path(path))
+        except bk.BackupError as exc:
+            QMessageBox.warning(self, t("restore.title"), t("backup.invalid", error=str(exc)))
+            return
+        dlg = RestoreDialog(self.c, info, self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        try:
+            result, safety = self.c.restore_backup(info, dlg.options())
+        except (bk.BackupError, OSError) as exc:
+            QMessageBox.warning(self, t("restore.title"), t("restore.failed", error=str(exc)))
+            return
+        parts = []
+        if result.settings_changed:
+            parts.append(t("restore.sum_settings", n=len(result.settings_changed)))
+        if result.usage_entries:
+            parts.append(t("restore.sum_usage", n=result.usage_entries))
+        if result.noteit:
+            parts.append(t("restore.sum_noteit"))
+        if result.templates_added or result.templates_skipped:
+            parts.append(t("restore.sum_templates", n=result.templates_added, r=len(result.renamed)))
+        QMessageBox.information(self, t("restore.title"),
+                                t("restore.done", summary=", ".join(parts) or "—", safety=safety.name))
+        self.reject()  # the fields show the old values: closing keeps them from overwriting the restore
 
     def _recorded(self, seq: QKeySequence) -> None:
         text = seq.toString(QKeySequence.PortableText)
@@ -300,5 +429,9 @@ class SettingsDialog(QDialog):
             "code_background": self.code_bg.text().strip(),
             "date_format": self.date_fmt.text().strip(),
             "time_format": self.time_fmt.text().strip(),
+            "backup_dir": "" if self._backup_folder() == default_backup_dir() else self.backup_dir.text().strip(),
+            "backup_auto": self.backup_auto.currentData(),
+            "backup_keep": self.backup_keep.value(),
+            "backup_include_templates": self.backup_templates.isChecked(),
         })
         self.accept()

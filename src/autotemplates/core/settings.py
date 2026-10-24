@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-from autotemplates.core.paths import default_library_dir
+from autotemplates.core.paths import default_backup_dir, default_library_dir
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,16 @@ DEFAULTS: dict[str, Any] = {
     "code_background": "#f6f8fa",
     "date_format": "%d.%m.%Y",
     "time_format": "%H:%M",
+    "backup_dir": "",  # empty = Documents\AutoTemplates Backups
+    "backup_auto": "daily",  # off | startup (every start) | daily (at most one a day)
+    "backup_keep": 10,  # newest backup zips kept in the backup folder
+    "backup_include_templates": False,  # the library is already in its own (often synced) folder
+    "backup_last": 0.0,  # time of the last successful backup
 }
+
+# Values that belong to this computer: a restore never takes them from a backup.
+LOCAL_KEYS = frozenset({"library_dir", "noteit_last_dir", "noteit_onenote_section", "start_with_windows",
+                        "backup_dir", "backup_last"})
 
 
 def _same_type(value: Any, default: Any) -> bool:
@@ -124,6 +133,13 @@ class Settings:
         if self._default_library is not None:
             return Path(self._default_library)
         return default_library_dir()
+
+    @property
+    def backup_dir(self) -> Path:
+        value = str(self.get("backup_dir") or "").strip()
+        if value:
+            return Path(os.path.expandvars(os.path.expanduser(value)))
+        return default_backup_dir()
 
     def as_dict(self) -> dict[str, Any]:
         return dict(self._values)
