@@ -56,6 +56,7 @@ EDITOR_LABELS: dict[str, tuple[str, str]] = {
 NOTEIT_LABELS: dict[str, tuple[str, str]] = {
     "copy_close": ("Copiază & Închide", "Copy & Close"),
     "save": ("Salvează nota", "Save the note"),
+    "discard": ("Renunță la notă (fără „Ultima notă”)", "Discard the note (not kept as “Last note”)"),
     "close": ("Închide (ciorna se păstrează)", "Close (the draft is kept)"),
     "help": ("Ghidul de utilizare", "User guide"),
 }
@@ -235,10 +236,14 @@ def _noteit(tr: Tr, c: Mapping[str, Any], li: int) -> str:
            "nota ajunge în clipboard și se deschide OneNote.",
            "<b>Send to OneNote</b>: pick the notebook and section, a page is created. Without OneNote desktop "
            "the note is copied and OneNote opens."),
-        tr("<b>Ciorna</b> rămâne dacă închizi fereastra. „Notă nouă” păstrează nota curentă ca „Ultima notă”, "
-           "iar „Ultima notă” o readuce.",
-           "<b>The draft</b> stays when you close the window. “New note” keeps the current note as “Last note”, "
-           "and “Last note” brings it back."),
+        tr("<b>Ciorna</b> rămâne dacă închizi fereastra. „Notă nouă” întreabă dacă păstrezi nota curentă ca „Ultima notă”, "
+           "iar „Ultima notă” o readuce. Butonul coș renunță definitiv la notă.",
+           "<b>The draft</b> stays when you close the window. “New note” asks whether to keep the current note as “Last note”, "
+           "and “Last note” brings it back. The bin button discards the note for good."),
+        tr("<b>Greșeală la lipire?</b> Butonul „Curăță formatarea” (și meniul de lângă el) scoate stilurile, "
+           "inclusiv fundalul/evidențierea copiată din altă sursă; „Renunță la notă” o șterge și pornești curat.",
+           "<b>Pasted something wrong?</b> The “Clear formatting” button (and its menu) removes styles, including "
+           "a background/highlight copied from elsewhere; “Discard” deletes the note so you start clean."),
     ]
     keys = [(_k(NOTEIT_SHORTCUTS[n]), tr(*NOTEIT_LABELS[n])) for n in NOTEIT_SHORTCUTS]
     return (

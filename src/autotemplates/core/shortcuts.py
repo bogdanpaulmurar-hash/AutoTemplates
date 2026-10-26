@@ -59,6 +59,7 @@ EDITOR_SHORTCUTS: dict[str, str] = {
 NOTEIT_SHORTCUTS: dict[str, str] = {
     "copy_close": "Ctrl+Return",
     "save": "Ctrl+S",
+    "discard": "Ctrl+Shift+Delete",
     "close": "Esc",
     "help": HELP_KEY,
 }

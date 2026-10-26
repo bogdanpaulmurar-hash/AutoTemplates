@@ -74,6 +74,7 @@ class NoteITWindow(QWidget):
         self._setup_ui()
         self._load_draft()
         QShortcut(QKeySequence(NOTEIT_SHORTCUTS["help"]), self, activated=lambda: self.controller.show_help("noteit"))
+        QShortcut(QKeySequence(NOTEIT_SHORTCUTS["discard"]), self, activated=self.discard_note)
 
         self._autosave = QTimer(self)
         self._autosave.setInterval(AUTOSAVE_MS)
@@ -124,6 +125,9 @@ class NoteITWindow(QWidget):
         top_bar.addWidget(self.btn_new)
         self.btn_last = self._tool_button("undo", t("noteit.last_note"), self.restore_last)
         top_bar.addWidget(self.btn_last)
+        self.btn_discard = self._tool_button("delete", with_shortcut(t("noteit.discard_tip"), "discard"),
+                                             self.discard_note)
+        top_bar.addWidget(self.btn_discard)
 
         self.btn_pin = QToolButton()
         self.btn_pin.setCheckable(True)
@@ -301,8 +305,26 @@ class NoteITWindow(QWidget):
             self._populate_folders()
 
     def new_note(self) -> None:
-        if not self._finished:
-            self._store_last()
+        if not self._finished and not self.is_empty():
+            box = QMessageBox(QMessageBox.Question, t("noteit.window_title"), t("noteit.new_ask"),
+                              QMessageBox.NoButton, self)
+            keep = box.addButton(t("noteit.new_keep"), QMessageBox.AcceptRole)
+            drop = box.addButton(t("noteit.new_discard"), QMessageBox.DestructiveRole)
+            box.addButton(QMessageBox.Cancel)
+            box.exec()
+            if box.clickedButton() is keep:
+                self._store_last()
+            elif box.clickedButton() is not drop:
+                return
+        self.reset_form()
+        self.title_edit.setFocus()
+
+    def discard_note(self, *, ask: bool = True) -> None:
+        """Drops the current note for good (no "Last note", draft deleted) and starts an empty one."""
+        if (ask and not self._finished and not self.is_empty()
+                and QMessageBox.question(self, t("noteit.window_title"), t("noteit.discard_ask"),
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes):
+            return
         self.reset_form()
         self.title_edit.setFocus()
 

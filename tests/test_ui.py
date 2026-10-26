@@ -593,3 +593,44 @@ def test_f1_opens_the_guide_on_the_right_section(qapp, home, monkeypatch):
     c.editor.a_help.trigger()
     c.run_action({"action": "help", "section": "backup"})
     assert opened == ["picker", "editor", "backup"]
+
+
+def test_noteit_discard_and_new_note(qapp, home):
+    from PySide6.QtWidgets import QMessageBox
+
+    c = _controller(qapp, home)
+    ni = c.noteit
+    ni.reset_form()
+    ni.title_edit.setText("Oops")
+    ni.editor.setHtml('<p style="background-color:#ffff00">pasted</p>')
+    ni._write_draft()
+    assert ni._state_file("draft").exists()
+
+    ni.discard_note(ask=False)
+    assert ni.is_empty() and not ni._state_file("draft").exists()
+    assert not ni._state_file("last").exists()  # discarded, not kept as "Last note"
+
+    # a closed window opens empty too, the old draft does not come back
+    ni.close()
+    from autotemplates.ui.noteit import NoteITWindow
+    assert NoteITWindow(c).is_empty()
+
+    # "New note" with Discard leaves no "last"; with Keep it stores one
+    ni.title_edit.setText("Keep me")
+    for label, kept in (("new_discard", False), ("new_keep", True)):
+        ni.title_edit.setText("Keep me")
+        ni._state_file("last").unlink(missing_ok=True)
+        orig = QMessageBox.exec
+        def fake(self, _label=label):
+            from autotemplates.i18n import t
+            self._clicked = next(b for b in self.buttons() if b.text() == t(f"noteit.{_label}"))
+            return 0
+        QMessageBox.exec = fake
+        QMessageBox.clickedButton = lambda self: self._clicked
+        try:
+            ni.new_note()
+        finally:
+            QMessageBox.exec = orig
+            del QMessageBox.clickedButton
+        assert ni.is_empty()
+        assert ni._state_file("last").exists() is kept
