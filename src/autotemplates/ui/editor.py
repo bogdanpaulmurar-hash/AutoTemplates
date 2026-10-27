@@ -306,7 +306,7 @@ class EditorWindow(QMainWindow):
         lay.setSpacing(0)
         bar1, bar2 = QToolBar(), QToolBar()
         for b in (bar1, bar2):
-            b.setIconSize(QSize(18, 18))
+            b.setIconSize(QSize(22, 22))
             lay.addWidget(b)
         r = self.rich
         self._act(bar1, "undo", "fmt.undo", r.undo)
