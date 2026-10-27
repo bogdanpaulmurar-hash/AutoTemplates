@@ -37,7 +37,7 @@ Small Windows tool that keeps the user's templates (formatted text, screenshots,
 - Status 0.3.6: `--self-test` passes on Windows (it caught a picker crash the offscreen tests missed — run it after UI changes); hotkey, paste, clipboard, the Office COM calls, the COM paste, backup/restore, the grouped picker and the guide window not yet tested on Windows — verify there before building on them.
 
 ## Status and logs
-- Open bugs and changes: `KNOWN_ISSUES.md`. History: `CHANGELOG.md` (if present). Test steps for unconfirmed versions: `TESTING.md`. Move an item from KNOWN_ISSUES to CHANGELOG once implemented and confirmed.
+- Open bugs and changes: the **MODIFICARI_PROIECTE (live)** document, section AutoTemplates (+ Inbox). Context: **PROIECTE_CONTEXT (live)**, section AutoTemplates. History: `CHANGELOG.md`. Test steps for unconfirmed versions: `TESTING.md`. Remove an item from MODIFICARI once implemented and confirmed.
 
 ## Keep this file current
 Update it in the same commit when: install/test/run commands change, a package is added/moved, the DevPilot integration changes, or a bug teaches a rule worth remembering. Not for ordinary features. Keep it under ~60 lines.
