@@ -29,12 +29,12 @@ def stylesheet(mode: str) -> str:
     QWidget {{ color: {c['text']}; }}
     QMainWindow, QDialog, #Picker, #PickerFrame {{ background: {c['bg']}; }}
     #PickerFrame {{ border: 1px solid {c['border']}; border-radius: 10px; }}
-    QToolBar {{ background: {c['panel']}; border: none; border-bottom: 1px solid {c['border']}; spacing: 2px; padding: 3px; }}
-    QToolButton {{ background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px; min-width: 22px; }}
+    QToolBar {{ background: {c['panel']}; border: none; border-bottom: 1px solid {c['border']}; spacing: 4px; padding: 5px; }}
+    QToolButton {{ background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 6px; min-width: 28px; min-height: 28px; }}
     QToolButton:hover {{ background: {c['hover']}; border-color: {c['border']}; }}
     QToolButton:checked {{ background: {c['select']}; border-color: {ACCENT}; }}
     QToolButton::menu-indicator {{ image: none; }}
-    QPushButton {{ background: {c['panel2']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 12px; }}
+    QPushButton {{ background: {c['panel2']}; border: 1px solid {c['border']}; border-radius: 7px; padding: 8px 16px; min-height: 20px; }}
     QPushButton:hover {{ border-color: {ACCENT}; }}
     QPushButton#Primary {{ background: {ACCENT}; color: white; border-color: {ACCENT}; }}
     QLineEdit, QPlainTextEdit, QTextEdit, QTextBrowser, QSpinBox, QComboBox, QKeySequenceEdit, QFontComboBox {{
