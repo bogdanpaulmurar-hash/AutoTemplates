@@ -5,8 +5,12 @@ echo.
 echo  AutoTemplates - instalare / install
 echo  Fara drepturi de administrator. Totul se instaleaza doar pentru utilizatorul curent.
 echo.
+if not exist "%~dp0scripts\install.ps1" (
+  echo  Lipseste scripts\install.ps1 - Google Drive nu a terminat sincronizarea? Asteapta si ruleaza din nou.
+  goto failed
+)
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install.ps1" -Autostart -DesktopShortcut
-if errorlevel 1 goto failed
+if %errorlevel% neq 0 goto failed
 echo.
 echo  ============================================================
 echo   Gata! AutoTemplates este instalat si pornit.
