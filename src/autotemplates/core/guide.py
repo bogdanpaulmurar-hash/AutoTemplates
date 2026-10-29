@@ -55,6 +55,8 @@ EDITOR_LABELS: dict[str, tuple[str, str]] = {
 }
 NOTEIT_LABELS: dict[str, tuple[str, str]] = {
     "copy_close": ("Copiază & Închide", "Copy & Close"),
+    "copy_plain": ("Copiază & Închide, ca text simplu", "Copy & Close, as plain text"),
+    "timestamp": ("Inserează data și ora în notă", "Insert the date and time into the note"),
     "save": ("Salvează nota", "Save the note"),
     "discard": ("Renunță la notă (fără „Ultima notă”)", "Discard the note (not kept as “Last note”)"),
     "close": ("Închide (ciorna se păstrează)", "Close (the draft is kept)"),
@@ -232,10 +234,10 @@ def _noteit(tr: Tr, c: Mapping[str, Any], li: int) -> str:
            "Outlook clasic se deschide un mail simplu.",
            "<b>Send Email</b>: a new Outlook mail with formatting and pictures, opened for review. Without "
            "classic Outlook a plain mail opens."),
-        tr("<b>Trimite OneNote</b>: alegi notebook-ul și secțiunea, se creează o pagină. Fără OneNote desktop "
-           "nota ajunge în clipboard și se deschide OneNote.",
-           "<b>Send to OneNote</b>: pick the notebook and section, a page is created. Without OneNote desktop "
-           "the note is copied and OneNote opens."),
+        tr("<b>Trimite OneNote</b>: alegi caietul și secțiunea (pagină nouă) sau o pagină existentă (nota devine "
+           "subpagina ei). Fără OneNote desktop nota ajunge în clipboard și vezi motivul.",
+           "<b>Send to OneNote</b>: pick the notebook and section (new page) or an existing page (the note becomes "
+           "its subpage). Without OneNote desktop the note is copied and you see the reason."),
         tr("<b>Ciorna</b> rămâne dacă închizi fereastra. „Notă nouă” întreabă dacă păstrezi nota curentă ca „Ultima notă”, "
            "iar „Ultima notă” o readuce. Butonul coș renunță definitiv la notă.",
            "<b>The draft</b> stays when you close the window. “New note” asks whether to keep the current note as “Last note”, "

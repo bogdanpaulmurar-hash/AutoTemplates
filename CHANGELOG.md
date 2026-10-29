@@ -1,4 +1,7 @@
 # Changelog
 
 ## Unreleased
+- OneNote: the note can go into a section (new page) or under an existing page (new subpage): the dialog is now a notebook/section/page tree with a filter; the page is moved after the parent's subtree with `UpdateHierarchy` (`core/noteit_export.place_as_subpage`, `platform/office.py`). Fix: when OneNote COM is unavailable the app no longer opens the bare `onenote:` link (OneNote answered "We couldn't open that location"); the note is copied and the real reason is shown.
+- NoteIT: Ctrl+Shift+D inserts date and time (formats from the settings); Ctrl+Shift+Enter copies as plain text and closes. Both are in the guide.
+- Tests: 97 pass offscreen on Linux; COM/OneNote not tested on Windows.
 - Editor: larger, clearer buttons. Toolbar icons 18 -> 22 px, tool buttons min 28 px with more padding, push buttons get more padding and a minimum height (`ui/theme.py`, `ui/editor.py`). Tests not run: PySide6/pytest are unavailable in the cloud environment; verify on Windows.

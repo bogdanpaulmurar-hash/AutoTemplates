@@ -12,7 +12,7 @@ import hashlib
 import html as html_lib
 import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -97,10 +97,18 @@ def merge_into_body(body_html: str, existing: str) -> str:
 
 # ------------------------------------------------------------------ OneNote
 @dataclass
+class OneNotePage:
+    id: str
+    title: str
+    level: int  # 1 = page, 2 = subpage, 3 = sub-subpage
+
+
+@dataclass
 class OneNoteSection:
     notebook: str
     path: str  # "Notebook / Group / Section"
     id: str
+    pages: list[OneNotePage] = field(default_factory=list)  # empty when read with hsSections
 
 
 def parse_hierarchy(xml_text: str) -> list[OneNoteSection]:
@@ -121,7 +129,9 @@ def parse_hierarchy(xml_text: str) -> list[OneNoteSection]:
                 continue
             name = child.get("name") or child.get("nickname") or "?"
             if kind == "Section" and child.get("ID"):
-                out.append(OneNoteSection(notebook, " / ".join(trail + [name]), child.get("ID")))
+                pages = [OneNotePage(p.get("ID"), p.get("name") or "?", _level(p))
+                         for p in child if local(p.tag) == "Page" and p.get("ID") and not skip(p)]
+                out.append(OneNoteSection(notebook, " / ".join(trail + [name]), child.get("ID"), pages))
             elif kind == "SectionGroup":
                 walk(child, notebook, trail + [name])
 
@@ -131,6 +141,35 @@ def parse_hierarchy(xml_text: str) -> list[OneNoteSection]:
         name = nb.get("nickname") or nb.get("name") or "?"
         walk(nb, name, [name])
     return out
+
+
+def _level(page: ET.Element) -> int:
+    try:
+        return min(max(int(page.get("pageLevel") or 1), 1), 3)
+    except ValueError:
+        return 1
+
+
+def place_as_subpage(section_xml: str, page_id: str, parent_id: str) -> str | None:
+    """Section XML (``GetHierarchy(section, hsPages)``) with ``page_id`` moved right after the
+    subtree of ``parent_id`` and one level deeper, for ``UpdateHierarchy``. None if either page is missing.
+    """
+    root = ET.fromstring(section_xml)
+    pages = [el for el in root if el.tag.rsplit("}", 1)[-1] == "Page"]
+    by_id = {el.get("ID"): el for el in pages}
+    if page_id not in by_id or parent_id not in by_id or page_id == parent_id:
+        return None
+    new, parent = by_id[page_id], by_id[parent_id]
+    root.remove(new)
+    pages.remove(new)
+    level = _level(parent)
+    end = pages.index(parent)
+    while end + 1 < len(pages) and _level(pages[end + 1]) > level:
+        end += 1
+    new.set("pageLevel", str(min(level + 1, 3)))
+    root.insert(list(root).index(pages[end]) + 1, new)
+    ET.register_namespace("one", root.tag[1:].split("}")[0] if root.tag.startswith("{") else ONENOTE_NS_2013)
+    return ET.tostring(root, encoding="unicode")
 
 
 def namespace_of(xml_text: str) -> str:
@@ -194,5 +233,5 @@ def _image_oe(tag: str, base: Path | None) -> str:
     return f'<one:OE><one:Image format="{fmt}">{size}<one:Data>{data}</one:Data></one:Image></one:OE>'
 
 
-__all__ = ["InlineImage", "OneNoteSection", "body_of", "local_path", "merge_into_body", "namespace_of",
+__all__ = ["InlineImage", "OneNotePage", "OneNoteSection", "place_as_subpage", "body_of", "local_path", "merge_into_body", "namespace_of",
            "onenote_page_xml", "outlook_html", "parse_hierarchy"]

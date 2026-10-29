@@ -94,3 +94,50 @@ def test_onenote_page_xml_empty_note():
     root = ET.fromstring(xml)
     assert re.search(r"<one:OEChildren><one:OE><one:T>", xml)
     assert root.get("ID") == "{P}"
+
+
+SECTION_PAGES = """<one:Section xmlns:one="http://schemas.microsoft.com/office/onenote/2013/onenote" name="S" ID="{S}">
+  <one:Page ID="{A}" name="A" pageLevel="1"/>
+  <one:Page ID="{A1}" name="A1" pageLevel="2"/>
+  <one:Page ID="{B}" name="B" pageLevel="1"/>
+  <one:Page ID="{NEW}" name="New" pageLevel="1"/>
+</one:Section>"""
+
+
+def _order(xml):
+    import xml.etree.ElementTree as ET
+    return [(p.get("ID"), p.get("pageLevel")) for p in ET.fromstring(xml)]
+
+
+def test_parse_hierarchy_reads_pages_with_levels():
+    xml = ('<one:Notebooks xmlns:one="http://schemas.microsoft.com/office/onenote/2013/onenote">'
+           '<one:Notebook name="N" ID="{N}"><one:Section name="S" ID="{S}">'
+           '<one:Page ID="{A}" name="A" pageLevel="1"/><one:Page ID="{A1}" name="A1" pageLevel="2"/>'
+           '</one:Section></one:Notebook></one:Notebooks>')
+    (section,) = ne.parse_hierarchy(xml)
+    assert [(p.id, p.title, p.level) for p in section.pages] == [("{A}", "A", 1), ("{A1}", "A1", 2)]
+
+
+def test_place_as_subpage_goes_after_the_parent_subtree():
+    out = ne.place_as_subpage(SECTION_PAGES, "{NEW}", "{A}")
+    assert _order(out) == [("{A}", "1"), ("{A1}", "2"), ("{NEW}", "2"), ("{B}", "1")]
+
+
+def test_place_as_subpage_under_a_subpage_and_missing_ids():
+    out = ne.place_as_subpage(SECTION_PAGES, "{NEW}", "{A1}")
+    assert _order(out)[2] == ("{NEW}", "3")
+    assert ne.place_as_subpage(SECTION_PAGES, "{NEW}", "{nope}") is None
+
+
+def test_onenote_dialog_tree_selects_section_or_page(qapp):
+    from autotemplates.ui.noteit import OneNoteSectionDialog
+
+    sec = ne.OneNoteSection("N", "N / G / S", "{S}", [ne.OneNotePage("{A}", "A", 1), ne.OneNotePage("{A1}", "A1", 2)])
+    dlg = OneNoteSectionDialog([sec], "{S}")
+    assert dlg.selected() == (sec, None)
+    page_item = dlg.tree.topLevelItem(0).child(0).child(0).child(0).child(0)  # N > G > S > A > A1
+    assert page_item.text(0) == "A1"
+    dlg.tree.setCurrentItem(page_item)
+    assert dlg.selected()[1].id == "{A1}"
+    dlg.filter.setText("zzz")
+    assert dlg.selected() is None
