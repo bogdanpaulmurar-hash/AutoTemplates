@@ -5,6 +5,12 @@ Pași de test pentru versiunile netestate pe Windows. Ce a fost confirmat (✅ �
 ## Actualizare înainte de test
 Închizi AutoTemplates din tray (Ieșire). În clona locală: `git pull`, apoi `Install.bat` (reinstalează codul și repornește aplicația). Opțional `pytest`. La 0.3.0 (pywin32 nou) reinstalarea e obligatorie. Versiunea apare în Setări › Despre.
 
+## Unreleased — OneNote subpagină și NoteIT (netestat pe Windows)
+1. NoteIT → Trimite OneNote: apare arborele caiet / secțiune / pagină. Alege o secțiune: pagină nouă la sfârșit.
+2. Alege o pagină existentă: nota apare ca subpagină imediat sub ea.
+3. Fără OneNote desktop: nota e în clipboard și mesajul arată motivul (copiază-l dacă apare pe laptopul de serviciu).
+4. Ctrl+Shift+D inserează data și ora; Ctrl+Shift+Enter copiază ca text simplu.
+
 ## 0.3.6 — NoteIT: renunță la notă (în main, netestat) — (26.10)
 - Lipești în NoteIT un text cu fundal colorat; „Curăță formatarea” (meniul butonului X) scoate fundalul.
 - Butonul coș (sau Ctrl+Shift+Del) cere confirmare și golește nota fără s-o păstreze ca Ultima notă; închizi și redeschizi NoteIT: e goală.

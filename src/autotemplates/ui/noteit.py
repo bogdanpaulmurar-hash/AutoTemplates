@@ -17,8 +17,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QHBoxLayout,
-                               QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton,
-                               QSizePolicy, QToolButton, QVBoxLayout, QWidget)
+                               QLabel, QLineEdit, QMenu, QMessageBox, QPushButton,
+                               QSizePolicy, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from autotemplates.core import formats
 from autotemplates.core.shortcuts import NOTEIT_SHORTCUTS
@@ -75,6 +75,8 @@ class NoteITWindow(QWidget):
         self._load_draft()
         QShortcut(QKeySequence(NOTEIT_SHORTCUTS["help"]), self, activated=lambda: self.controller.show_help("noteit"))
         QShortcut(QKeySequence(NOTEIT_SHORTCUTS["discard"]), self, activated=self.discard_note)
+        QShortcut(QKeySequence(NOTEIT_SHORTCUTS["copy_plain"]), self, activated=lambda: self._copy_and_close(plain=True))
+        QShortcut(QKeySequence(NOTEIT_SHORTCUTS["timestamp"]), self, activated=self.insert_timestamp)
 
         self._autosave = QTimer(self)
         self._autosave.setInterval(AUTOSAVE_MS)
@@ -157,7 +159,7 @@ class NoteITWindow(QWidget):
         self.btn_copy_close.setToolTip("Ctrl+Enter")
         self.btn_copy_close.setStyleSheet(f"background: {theme.ACCENT}; color: white; font-weight: bold; "
                                           "padding: 6px 14px; border-radius: 6px;")
-        self.btn_copy_close.clicked.connect(self._copy_and_close)
+        self.btn_copy_close.clicked.connect(lambda: self._copy_and_close())
         bar.addWidget(self.btn_copy_close)
 
         self.btn_save = QPushButton(t("noteit.save"))
@@ -419,11 +421,21 @@ class NoteITWindow(QWidget):
     def _title(self, fallback_key: str = "noteit.untitled") -> str:
         return self.title_edit.text().strip() or t(fallback_key)
 
-    def _copy_and_close(self) -> None:
+    def insert_timestamp(self) -> None:
+        """Types the current date and time at the cursor (formats from the settings)."""
+        settings = self.controller.settings
+        fmt = f"{settings.get('date_format') or '%d.%m.%Y'} {settings.get('time_format') or '%H:%M'}"
+        self.editor.textCursor().insertText(datetime.datetime.now().strftime(fmt))
+        self.editor.setFocus()
+
+    def _copy_and_close(self, *, plain: bool = False) -> None:
         from autotemplates.ui.inserter import build_mime
 
-        html = self.controller.inserter.clipboard_html(self.editor.toHtml())
-        QGuiApplication.clipboard().setMimeData(build_mime(html, self.editor.toPlainText()))
+        if plain:
+            QGuiApplication.clipboard().setText(self.editor.toPlainText())
+        else:
+            html = self.controller.inserter.clipboard_html(self.editor.toHtml())
+            QGuiApplication.clipboard().setMimeData(build_mime(html, self.editor.toPlainText()))
         self._finish()
         self.controller.notify(t("noteit.copied"))
 
@@ -490,37 +502,41 @@ class NoteITWindow(QWidget):
         from autotemplates.platform import office
 
         QApplication.setOverrideCursor(Qt.WaitCursor)
+        reason = ""
         try:
             sections = office.onenote_sections()
         except office.OfficeUnavailable as e:
             log.info("OneNote unavailable (%s); copying instead", e)
-            sections = []
+            sections, reason = [], str(e)
         finally:
             QApplication.restoreOverrideCursor()
         if not sections:
-            self._onenote_fallback()
+            self._onenote_fallback(reason)
             return
         dlg = OneNoteSectionDialog(sections, str(self.controller.settings.get("noteit_onenote_section") or ""), self)
         if dlg.exec() != QDialog.Accepted or dlg.selected() is None:
             return
-        section = dlg.selected()
+        section, parent_page = dlg.selected()
         self.controller.settings.set("noteit_onenote_section", section.id)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            office.create_onenote_page(section.id, self._title(), self.editor.toHtml())
+            office.create_onenote_page(section.id, self._title(), self.editor.toHtml(),
+                                       parent_page_id=parent_page.id if parent_page else "")
         except office.OfficeUnavailable as e:
             QApplication.restoreOverrideCursor()
             QMessageBox.warning(self, "OneNote", t("noteit.onenote_failed", error=e))
             return
         QApplication.restoreOverrideCursor()
-        self.controller.notify(t("noteit.onenote_done", section=section.path))
+        where = f"{section.path} / {parent_page.title}" if parent_page else section.path
+        self.controller.notify(t("noteit.onenote_done", section=where))
         self._finish()
 
-    def _onenote_fallback(self) -> None:
+    def _onenote_fallback(self, reason: str = "") -> None:
+        """No OneNote COM: the note goes to the clipboard and the user is told why (no blind ``onenote:`` link,
+        OneNote shows "couldn't open that location" for it)."""
         self._copy_and_close()
-        if not QDesktopServices.openUrl(QUrl("onenote:")):
-            log.debug("onenote: protocol not registered")
-        self.controller.notify(t("noteit.onenote_paste"))
+        QMessageBox.information(self, "OneNote", t("noteit.onenote_paste") + "\n\n"
+                                + t("noteit.onenote_reason", reason=reason or "?"))
 
     # ================================================================ events
     def keyPressEvent(self, event) -> None:
@@ -530,6 +546,9 @@ class NoteITWindow(QWidget):
             return
         if mods == Qt.ControlModifier and key in (Qt.Key_Return, Qt.Key_Enter):
             self._copy_and_close()
+            return
+        if mods == Qt.ControlModifier | Qt.ShiftModifier and key in (Qt.Key_Return, Qt.Key_Enter):
+            self._copy_and_close(plain=True)
             return
         if mods == Qt.ControlModifier and key == Qt.Key_S:
             self._save_note()
@@ -545,50 +564,88 @@ class NoteITWindow(QWidget):
 
 
 class OneNoteSectionDialog(QDialog):
-    """Pick the OneNote notebook / section for the new page (with a filter)."""
+    """Pick where the new OneNote page goes: a section (new page) or a page (new subpage), with a filter."""
 
     def __init__(self, sections, current_id: str = "", parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(t("noteit.onenote_pick"))
-        self.resize(460, 420)
+        self.resize(480, 460)
         lay = QVBoxLayout(self)
         self.filter = QLineEdit()
         self.filter.setPlaceholderText(t("noteit.onenote_filter"))
         self.filter.textChanged.connect(self._apply_filter)
         lay.addWidget(self.filter)
-        self.list = QListWidget()
-        for s in sections:
-            item = QListWidgetItem(s.path)
-            item.setData(Qt.UserRole, s)
-            self.list.addItem(item)
-            if s.id == current_id:
-                self.list.setCurrentItem(item)
-        if self.list.currentItem() is None and self.list.count():
-            self.list.setCurrentRow(0)
-        self.list.itemDoubleClicked.connect(lambda _item: self.accept())
-        lay.addWidget(self.list, 1)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self._build(sections, current_id)
+        self.tree.itemDoubleClicked.connect(lambda item, _col: self._double_clicked(item))
+        lay.addWidget(self.tree, 1)
+        hint = QLabel(t("noteit.onenote_hint"))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #9a9eab; font-size: 8.5pt;")
+        lay.addWidget(hint)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         lay.addWidget(buttons)
         self.filter.setFocus()
 
+    def _build(self, sections, current_id: str) -> None:
+        groups: dict[tuple[str, ...], QTreeWidgetItem] = {}
+        current = None
+        for s in sections:
+            parts = tuple(p.strip() for p in s.path.split(" / "))
+            parent = self.tree.invisibleRootItem()
+            for i in range(len(parts) - 1):  # notebook and section groups
+                key = parts[: i + 1]
+                if key not in groups:
+                    groups[key] = QTreeWidgetItem(parent, [parts[i]])
+                    groups[key].setFlags(groups[key].flags() & ~Qt.ItemIsSelectable)
+                parent = groups[key]
+            sec_item = QTreeWidgetItem(parent, [parts[-1]])
+            sec_item.setData(0, Qt.UserRole, (s, None))
+            stack = {0: sec_item}  # page level -> item, so subpages nest under their page
+            for page in s.pages:
+                owner = stack.get(page.level - 1, sec_item)
+                page_item = QTreeWidgetItem(owner, [page.title])
+                page_item.setData(0, Qt.UserRole, (s, page))
+                stack[page.level] = page_item
+            if s.id == current_id:
+                current = sec_item
+        self.tree.expandToDepth(1)
+        if current is not None:
+            self.tree.setCurrentItem(current)
+            self.tree.scrollToItem(current)
+        elif self.tree.topLevelItemCount():
+            first = self.tree.topLevelItem(0)
+            self.tree.setCurrentItem(first.child(0) or first)
+
+    def _double_clicked(self, item) -> None:
+        if item.data(0, Qt.UserRole) is not None:
+            self.accept()
+
     def _apply_filter(self, text: str) -> None:
         needle = text.casefold().strip()
-        first = None
-        for i in range(self.list.count()):
-            item = self.list.item(i)
-            hidden = bool(needle) and needle not in item.text().casefold()
-            item.setHidden(hidden)
-            if not hidden and first is None:
-                first = item
-        cur = self.list.currentItem()
-        if (cur is None or cur.isHidden()) and first is not None:
-            self.list.setCurrentItem(first)
+
+        def visit(item: QTreeWidgetItem, ancestor_match: bool) -> bool:
+            own = bool(needle) and needle in item.text(0).casefold()
+            shown = False
+            for i in range(item.childCount()):
+                shown |= visit(item.child(i), ancestor_match or own)
+            show = not needle or own or ancestor_match or shown
+            item.setHidden(not show)
+            if needle and shown:
+                item.setExpanded(True)
+            return show
+
+        for i in range(self.tree.topLevelItemCount()):
+            visit(self.tree.topLevelItem(i), False)
 
     def selected(self):
-        item = self.list.currentItem()
-        return None if item is None or item.isHidden() else item.data(Qt.UserRole)
+        """(section, parent page or None) of the chosen item, or None."""
+        item = self.tree.currentItem()
+        data = None if item is None or item.isHidden() else item.data(0, Qt.UserRole)
+        return data
 
 
 __all__ = ["NoteITWindow", "OneNoteSectionDialog", "safe_file_name", "unique_path"]

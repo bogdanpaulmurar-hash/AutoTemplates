@@ -13,13 +13,13 @@ import sys
 from pathlib import Path
 
 from autotemplates.core.noteit_export import (OneNoteSection, body_of, merge_into_body, onenote_page_xml,
-                                              outlook_html, parse_hierarchy)
+                                              outlook_html, parse_hierarchy, place_as_subpage)
 
 log = logging.getLogger(__name__)
 
 IS_WINDOWS = sys.platform == "win32"
 PR_ATTACH_CONTENT_ID = "http://schemas.microsoft.com/mapi/proptag/0x3712001F"
-HS_SECTIONS = 3  # HierarchyScope.hsSections
+HS_PAGES = 4  # HierarchyScope.hsPages (sections with their pages)
 
 
 class OfficeUnavailable(RuntimeError):
@@ -136,19 +136,27 @@ def paste_original(process: str, title: str, focus_class: str) -> None:
 def onenote_sections() -> list[OneNoteSection]:
     app = _dispatch("OneNote.Application")
     try:
-        xml_text = _out(app.GetHierarchy("", HS_SECTIONS))
+        xml_text = _out(app.GetHierarchy("", HS_PAGES))
         return parse_hierarchy(xml_text)
     except Exception as e:  # noqa: BLE001
         log.exception("OneNote hierarchy failed")
         raise OfficeUnavailable(f"OneNote: {e}") from e
 
 
-def create_onenote_page(section_id: str, title: str, markup: str, base: Path | None = None) -> None:
-    """Creates a page in ``section_id`` with the note and opens it in OneNote."""
+def create_onenote_page(section_id: str, title: str, markup: str, base: Path | None = None,
+                        parent_page_id: str = "") -> None:
+    """Creates a page in ``section_id`` (a subpage of ``parent_page_id`` if given) and opens it in OneNote."""
     app = _dispatch("OneNote.Application")
     try:
         page_id = _out(app.CreateNewPage(section_id, 0))  # npsDefault
         app.UpdatePageContent(onenote_page_xml(page_id, title, markup, base))  # 2013 schema (OneNote 2013+)
+        if parent_page_id:
+            try:
+                moved = place_as_subpage(_out(app.GetHierarchy(section_id, HS_PAGES)), page_id, parent_page_id)
+                if moved:
+                    app.UpdateHierarchy(moved)
+            except Exception:  # noqa: BLE001 - the page exists at the end of the section; moving it is a bonus
+                log.warning("OneNote subpage placement failed", exc_info=True)
         try:
             app.NavigateTo(page_id, "", False)
         except Exception:  # noqa: BLE001 - the page exists; showing it is a bonus
