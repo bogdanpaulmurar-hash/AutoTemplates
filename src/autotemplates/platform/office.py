@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 IS_WINDOWS = sys.platform == "win32"
 PR_ATTACH_CONTENT_ID = "http://schemas.microsoft.com/mapi/proptag/0x3712001F"
+HS_NOTEBOOKS = 1  # HierarchyScope.hsNotebooks
 HS_PAGES = 4  # HierarchyScope.hsPages (sections with their pages)
 
 
@@ -133,37 +134,149 @@ def paste_original(process: str, title: str, focus_class: str) -> None:
 
 
 # ------------------------------------------------------------------ OneNote
+class _ComOneNote:
+    """OneNote through pywin32. Late binding cannot call the methods with [out] parameters
+    on some installs (AttributeError), which is what ``_onenote_api`` probes for."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    def hierarchy(self, start_id: str, scope: int) -> str:
+        return _out(self.app.GetHierarchy(start_id, scope))
+
+    def new_page(self, section_id: str) -> str:
+        return _out(self.app.CreateNewPage(section_id, 0))  # npsDefault
+
+    def update_page(self, xml: str) -> None:
+        self.app.UpdatePageContent(xml)  # 2013 schema (OneNote 2013+)
+
+    def update_hierarchy(self, xml: str) -> None:
+        self.app.UpdateHierarchy(xml)
+
+    def navigate(self, page_id: str) -> None:
+        self.app.NavigateTo(page_id, "", False)
+
+
+ONENOTE_PS = r"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$o = New-Object -ComObject OneNote.Application
+$a = [string]$env:ONP_A
+switch ($env:ONP_OP) {
+  'hierarchy' { $x = ''; $o.GetHierarchy($a, [int]$env:ONP_B, [ref]$x); [Console]::Out.Write($x) }
+  'newpage'   { $id = ''; $o.CreateNewPage($a, [ref]$id, 0); [Console]::Out.Write($id) }
+  'update'    { $o.UpdatePageContent([IO.File]::ReadAllText($env:ONP_FILE, [Text.Encoding]::UTF8)) }
+  'hupdate'   { $o.UpdateHierarchy([IO.File]::ReadAllText($env:ONP_FILE, [Text.Encoding]::UTF8)) }
+  'navigate'  { $o.NavigateTo($a, '', $false) }
+}
+"""
+
+
+class _PowerShellOneNote:
+    """OneNote through Windows PowerShell's COM binding, which knows the [out] parameters
+    without a type library. Slower (one process per call) but works where pywin32 does not."""
+
+    def _run(self, op: str, a: str = "", b: int = 0, xml: str | None = None) -> str:
+        import base64
+        import os
+        import subprocess
+        import tempfile
+
+        env = dict(os.environ, ONP_OP=op, ONP_A=a, ONP_B=str(b))
+        tmp = None
+        try:
+            if xml is not None:
+                with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False, encoding="utf-8") as f:
+                    f.write(xml)
+                tmp = env["ONP_FILE"] = f.name
+            encoded = base64.b64encode(ONENOTE_PS.encode("utf-16-le")).decode("ascii")
+            try:
+                proc = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                    env=env, capture_output=True, timeout=90,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            except (OSError, subprocess.SubprocessError) as e:
+                raise OfficeUnavailable(f"PowerShell: {type(e).__name__}: {e}") from e
+        finally:
+            if tmp:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+        if proc.returncode != 0:
+            err = proc.stderr.decode("utf-8", "replace").strip().splitlines()
+            raise OfficeUnavailable(f"PowerShell: {err[0] if err else proc.returncode}")
+        return proc.stdout.decode("utf-8-sig", "replace")
+
+    def hierarchy(self, start_id: str, scope: int) -> str:
+        return self._run("hierarchy", start_id, scope)
+
+    def new_page(self, section_id: str) -> str:
+        return self._run("newpage", section_id).strip()
+
+    def update_page(self, xml: str) -> None:
+        self._run("update", xml=xml)
+
+    def update_hierarchy(self, xml: str) -> None:
+        self._run("hupdate", xml=xml)
+
+    def navigate(self, page_id: str) -> None:
+        self._run("navigate", page_id)
+
+
+_onenote_backend = None
+
+
+def _onenote_api():
+    """pywin32 if it can really read the hierarchy, otherwise the PowerShell bridge (decided once)."""
+    global _onenote_backend
+    if _onenote_backend is None:
+        try:
+            api = _ComOneNote(_dispatch("OneNote.Application"))
+            api.hierarchy("", HS_NOTEBOOKS)
+            _onenote_backend = api
+        except Exception as e:  # noqa: BLE001 - no pywin32, AttributeError, com_error: use PowerShell instead
+            log.info("pywin32 OneNote unusable (%s: %s); using PowerShell", type(e).__name__, e)
+            _onenote_backend = _PowerShellOneNote()
+    return _onenote_backend
+
+
 def onenote_sections() -> list[OneNoteSection]:
-    app = _dispatch("OneNote.Application")
     try:
-        xml_text = _out(app.GetHierarchy("", HS_PAGES))
-        return parse_hierarchy(xml_text)
+        sections = parse_hierarchy(_onenote_api().hierarchy("", HS_PAGES))
+    except OfficeUnavailable:
+        raise
     except Exception as e:  # noqa: BLE001
         log.exception("OneNote hierarchy failed")
-        raise OfficeUnavailable(f"OneNote: {e}") from e
+        raise OfficeUnavailable(f"OneNote: {type(e).__name__}: {e}") from e
+    if not sections:
+        raise OfficeUnavailable("OneNote answers but shows no open notebook or section (not signed in?)")
+    return sections
 
 
 def create_onenote_page(section_id: str, title: str, markup: str, base: Path | None = None,
                         parent_page_id: str = "") -> None:
     """Creates a page in ``section_id`` (a subpage of ``parent_page_id`` if given) and opens it in OneNote."""
-    app = _dispatch("OneNote.Application")
     try:
-        page_id = _out(app.CreateNewPage(section_id, 0))  # npsDefault
-        app.UpdatePageContent(onenote_page_xml(page_id, title, markup, base))  # 2013 schema (OneNote 2013+)
+        api = _onenote_api()
+        page_id = api.new_page(section_id)
+        api.update_page(onenote_page_xml(page_id, title, markup, base))
         if parent_page_id:
             try:
-                moved = place_as_subpage(_out(app.GetHierarchy(section_id, HS_PAGES)), page_id, parent_page_id)
+                moved = place_as_subpage(api.hierarchy(section_id, HS_PAGES), page_id, parent_page_id)
                 if moved:
-                    app.UpdateHierarchy(moved)
+                    api.update_hierarchy(moved)
             except Exception:  # noqa: BLE001 - the page exists at the end of the section; moving it is a bonus
                 log.warning("OneNote subpage placement failed", exc_info=True)
         try:
-            app.NavigateTo(page_id, "", False)
+            api.navigate(page_id)
         except Exception:  # noqa: BLE001 - the page exists; showing it is a bonus
             log.debug("OneNote NavigateTo failed", exc_info=True)
+    except OfficeUnavailable:
+        raise
     except Exception as e:  # noqa: BLE001
         log.exception("OneNote page failed")
-        raise OfficeUnavailable(f"OneNote: {e}") from e
+        raise OfficeUnavailable(f"OneNote: {type(e).__name__}: {e}") from e
 
 
 __all__ = ["OfficeUnavailable", "create_onenote_page", "onenote_sections", "open_outlook_mail"]
